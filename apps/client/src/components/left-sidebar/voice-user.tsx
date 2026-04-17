@@ -51,7 +51,8 @@ const VoiceUser = memo(({ user, isOwnChannel = false }: TVoiceUserProps) => {
           {user.state.micMuted ? (
             <MicOff className="h-3 w-3 text-red-500" />
           ) : (
-            <Mic className="h-3 w-3 text-green-500" />
+            <></>
+            // <Mic className="h-3 w-3 text-green-500" />
           )}
         </div>
 
@@ -59,7 +60,8 @@ const VoiceUser = memo(({ user, isOwnChannel = false }: TVoiceUserProps) => {
           {user.state.soundMuted ? (
             <HeadphoneOff className="h-3 w-3 text-red-500" />
           ) : (
-            <Headphones className="h-3 w-3 text-green-500" />
+            <></>
+            // <Headphones className="h-3 w-3 text-green-500" />
           )}
         </div>
 
