@@ -15,6 +15,10 @@
       "project": ["src/**/*.{ts,tsx}"],
       "ignore": ["dist/**", "public/**"]
     },
+    "apps/desktop": {
+      "entry": ["src/main.js"],
+      "project": ["src/**/*.js", "renderer/**/*.js"]
+    },
     "packages/shared": {
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"]

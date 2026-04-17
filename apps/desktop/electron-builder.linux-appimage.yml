@@ -1,0 +1,4 @@
+extends: ./electron-builder.yml
+linux:
+  target: [AppImage]
+  category: Network

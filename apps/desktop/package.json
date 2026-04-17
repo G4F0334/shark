@@ -1,0 +1,24 @@
+{
+  "name": "desktop",
+  "productName": "Sharkord",
+  "version": "0.0.1",
+  "description": "Sharkord desktop shell",
+  "author": "Sharkord",
+  "type": "module",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux -c electron-builder.linux.yml",
+    "dist:linux:appimage": "electron-builder --linux -c electron-builder.linux-appimage.yml"
+  },
+  "devDependencies": {
+    "electron": "^34.5.8",
+    "electron-builder": "^26.0.12"
+  }
+}

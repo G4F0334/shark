@@ -1,7 +1,9 @@
 /node_modules
+/apps/desktop/release
 /.github/copilot-instructions.md
 /cenas.txt
 /cenas.md
 /DockerCenas
 /experiments
+/apps/desktop/node_modules
 .direnv/

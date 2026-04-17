@@ -1,0 +1,7 @@
+extends: ./electron-builder.yml
+linux:
+  # tar.gz avoids AppImage symlink step (fails on Windows without Developer Mode)
+  target:
+    - target: tar.gz
+      arch: [x64]
+  category: Network

@@ -1,0 +1,29 @@
+appId: com.sharkord.desktop
+productName: Sharkord
+copyright: Copyright © Sharkord
+
+directories:
+  output: release
+
+files:
+  - src/**/*
+  - renderer/**/*
+  - package.json
+
+asar: true
+
+win:
+  # Skip exe patching that pulls winCodeSign (symlink extraction on Windows without Dev Mode)
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+mac:
+  target: [dmg]
+  category: public.app-category.social-networking
+
+# Linux: dist:linux → tar.gz (works on Windows). AppImage → dist:linux:appimage on Linux CI only.
