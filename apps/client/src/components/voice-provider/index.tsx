@@ -21,6 +21,7 @@ import {
   getSuppressLocalAudioPlaybackSupport
 } from '@/helpers/get-display-media-support';
 import { getResWidthHeight } from '@/helpers/get-res-with-height';
+import { pickScreenShareH264Codec } from '@/helpers/pick-screen-share-h264-codec';
 import { useScreenShareSupport } from '@/hooks/use-screen-share-support';
 import { getTRPCClient } from '@/lib/trpc';
 import { NoiseSuppression, VideoCodec } from '@/types';
@@ -669,14 +670,20 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
           devices.screenCodec !== VideoCodec.AUTO &&
           routerRtpCapabilities.current?.codecs
         ) {
-          preferredCodec = routerRtpCapabilities.current.codecs.find(
-            (c) =>
-              c.mimeType.toLowerCase() === devices.screenCodec.toLowerCase()
-          );
+          preferredCodec =
+            devices.screenCodec === VideoCodec.H264
+              ? pickScreenShareH264Codec(routerRtpCapabilities.current.codecs)
+              : routerRtpCapabilities.current.codecs.find(
+                  (c) =>
+                    c.mimeType.toLowerCase() ===
+                    devices.screenCodec.toLowerCase()
+                );
 
           if (preferredCodec) {
             logVoice('Using preferred screen share codec', {
-              codec: preferredCodec.mimeType
+              codec: preferredCodec.mimeType,
+              profileLevelId:
+                preferredCodec.parameters?.['profile-level-id'] ?? null
             });
           }
         }
