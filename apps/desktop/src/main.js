@@ -2,7 +2,7 @@ import {
   app,
   BrowserWindow,
   desktopCapturer,
-  screen,
+  ipcMain,
   session
 } from 'electron';
 import path from 'node:path';
@@ -23,38 +23,160 @@ applyWebRtcGpuEncodingPreferences();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function pickDisplaySource(sources) {
-  if (sources.length === 0) return undefined;
-  const screenSources = sources.filter((s) => s.id.startsWith('screen:'));
-  if (screenSources.length === 0) return sources[0];
+/** @type {BrowserWindow | null} */
+let displayPickerWindow = null;
 
-  const primaryId = String(screen.getPrimaryDisplay().id);
-  return (
-    screenSources.find((s) => s.display_id === primaryId) ?? screenSources[0]
+/** @type {{ callback: (s: Record<string, unknown>) => void; audioRequested: boolean } | null} */
+let pendingDisplayMedia = null;
+
+function closeDisplayPickerWindow() {
+  if (displayPickerWindow && !displayPickerWindow.isDestroyed()) {
+    displayPickerWindow.removeAllListeners('closed');
+    displayPickerWindow.close();
+  }
+  displayPickerWindow = null;
+}
+
+/**
+ * @param {BrowserWindow | null} parent
+ * @param {boolean} audioRequested
+ */
+function createDisplayPickerWindow(parent, audioRequested) {
+  closeDisplayPickerWindow();
+
+  displayPickerWindow = new BrowserWindow({
+    parent: parent ?? undefined,
+    modal: Boolean(parent),
+    width: 680,
+    height: 560,
+    minWidth: 420,
+    minHeight: 360,
+    title: audioRequested ? 'Выбор экрана и звука' : 'Выбор экрана',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    },
+    show: false
+  });
+
+  displayPickerWindow.once('ready-to-show', () => displayPickerWindow?.show());
+
+  displayPickerWindow.on('closed', () => {
+    displayPickerWindow = null;
+    if (pendingDisplayMedia) {
+      const cb = pendingDisplayMedia.callback;
+      pendingDisplayMedia = null;
+      cb({});
+    }
+  });
+
+  displayPickerWindow.loadFile(
+    path.join(__dirname, '..', 'renderer', 'display-picker.html')
   );
+}
+
+/** @param {Electron.DisplayMediaRequestHandlerHandlerRequest} req */
+function parentWindowFromDisplayMediaRequest(req) {
+  try {
+    const frame = req.frame;
+    const wc = frame?.hostWebContents;
+    if (wc) {
+      const win = BrowserWindow.fromWebContents(wc);
+      if (win && !win.isDestroyed()) return win;
+    }
+  } catch {
+    // ignore
+  }
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && !focused.isDestroyed()) return focused;
+  const all = BrowserWindow.getAllWindows();
+  return all.find((w) => !w.isDestroyed()) ?? null;
 }
 
 function registerDisplayMediaHandler() {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    desktopCapturer
-      .getSources({
-        types: ['screen', 'window'],
-        thumbnailSize: { width: 1, height: 1 },
-        fetchWindowIcons: false
-      })
-      .then((sources) => {
-        const video = pickDisplaySource(sources);
-        if (!video) {
-          callback({});
-          return;
-        }
-        const streams = { video };
-        if (request.audioRequested) {
-          streams.audio = 'loopback';
-        }
-        callback(streams);
-      })
-      .catch(() => callback({}));
+    if (pendingDisplayMedia) {
+      callback({});
+      return;
+    }
+
+    const parentWin = parentWindowFromDisplayMediaRequest(request);
+    const audioRequested = Boolean(request.audioRequested);
+
+    pendingDisplayMedia = {
+      callback,
+      audioRequested
+    };
+
+    createDisplayPickerWindow(parentWin, audioRequested);
+  });
+}
+
+function registerDisplayPickerIpc() {
+  ipcMain.handle('desktop:display-media:list-sources', async () => {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 320, height: 180 },
+      fetchWindowIcons: true
+    });
+
+    return sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      display_id: s.display_id,
+      isScreen: s.id.startsWith('screen:'),
+      thumb: s.thumbnail.toDataURL()
+    }));
+  });
+
+  ipcMain.handle('desktop:display-media:submit', async (_evt, payload) => {
+    const sourceId =
+      typeof payload === 'string'
+        ? payload
+        : typeof payload?.sourceId === 'string'
+          ? payload.sourceId
+          : '';
+
+    if (!sourceId || !pendingDisplayMedia) {
+      return { ok: false, error: 'Запрос демонстрации недействителен или устарел.' };
+    }
+
+    const audioRequested = pendingDisplayMedia.audioRequested;
+    const cb = pendingDisplayMedia.callback;
+    pendingDisplayMedia = null;
+
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 1, height: 1 },
+      fetchWindowIcons: false
+    });
+    const video = sources.find((s) => s.id === sourceId);
+    if (!video) {
+      cb({});
+      closeDisplayPickerWindow();
+      return { ok: false, error: 'Источник больше не доступен.' };
+    }
+
+    const streams = { video };
+    if (audioRequested) {
+      streams.audio = 'loopback';
+    }
+    cb(streams);
+    closeDisplayPickerWindow();
+    return { ok: true };
+  });
+
+  ipcMain.handle('desktop:display-media:cancel', async () => {
+    if (pendingDisplayMedia) {
+      const cb = pendingDisplayMedia.callback;
+      pendingDisplayMedia = null;
+      cb({});
+    }
+    closeDisplayPickerWindow();
+    return { ok: true };
   });
 }
 
@@ -79,6 +201,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  registerDisplayPickerIpc();
   registerDisplayMediaHandler();
   createWindow();
 

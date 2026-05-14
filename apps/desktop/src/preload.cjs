@@ -1,5 +1,11 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktop', {
-  platform: process.platform
+  platform: process.platform,
+  displayMediaPicker: {
+    listSources: () => ipcRenderer.invoke('desktop:display-media:list-sources'),
+    submit: (payload) =>
+      ipcRenderer.invoke('desktop:display-media:submit', payload),
+    cancel: () => ipcRenderer.invoke('desktop:display-media:cancel')
+  }
 });
