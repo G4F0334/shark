@@ -12,6 +12,10 @@ files:
 
 asar: true
 
+extraResources:
+  - from: lib/ApplicationLoopback.exe
+    to: lib/ApplicationLoopback.exe
+
 win:
   # Skip exe patching that pulls winCodeSign (symlink extraction on Windows without Dev Mode)
   signAndEditExecutable: false

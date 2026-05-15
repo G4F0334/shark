@@ -598,6 +598,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
   const stopScreenShareStream = useCallback(() => {
     logVoice('Stopping screen share stream');
 
+    void window.desktop?.applicationLoopbackStop?.();
+
     localScreenShareStream?.getTracks().forEach((track) => {
       logVoice('Stopping screen share track', { track });
 

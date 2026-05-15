@@ -1,5 +1,10 @@
 import { BrowserWindow, desktopCapturer, ipcMain, session } from 'electron';
 import path from 'node:path';
+import {
+  resolveApplicationLoopbackExe,
+  startApplicationLoopbackForDesktopShare,
+  stopApplicationLoopbackChild
+} from './application-loopback.js';
 
 /**
  * @typedef {import('electron').DisplayMediaRequestHandlerStreams} DisplayMediaStreams
@@ -16,7 +21,10 @@ function createDisplayMediaPickerController({ srcDir }) {
   /** @type {BrowserWindow | null} */
   let pickerWindow = null;
 
-  /** @type {{ callback: (streams: DisplayMediaStreams) => void; audioRequested: boolean } | null} */
+  /**
+   * sharkExcludePid — PID renderer'а основного окна Sharkord (не окна picker).
+   * @type {{ callback: (streams: DisplayMediaStreams) => void; audioRequested: boolean; sharkExcludePid: number | null } | null}
+   */
   let pending = null;
 
   function closePicker() {
@@ -57,6 +65,7 @@ function createDisplayMediaPickerController({ srcDir }) {
     pickerWindow.on('closed', () => {
       pickerWindow = null;
       if (pending) {
+        stopApplicationLoopbackChild();
         const cb = pending.callback;
         pending = null;
         cb({});
@@ -83,6 +92,30 @@ function createDisplayMediaPickerController({ srcDir }) {
     return BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null;
   }
 
+  /** Renderer PID, который запросил getDisplayMedia (исключить его звук при screen + loopback). */
+  function osPidExcludeSharkAudio(req) {
+    try {
+      const host = req.frame?.hostWebContents;
+      if (host && typeof host.getOSProcessId === 'function') {
+        const p = host.getOSProcessId();
+        if (Number.isFinite(p) && p > 0) return p;
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      const win = parentWindowFromRequest(req);
+      const wc = win?.webContents;
+      if (wc && typeof wc.getOSProcessId === 'function') {
+        const p = wc.getOSProcessId();
+        if (Number.isFinite(p) && p > 0) return p;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
   function registerSessionHandler() {
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
       if (pending) {
@@ -92,7 +125,8 @@ function createDisplayMediaPickerController({ srcDir }) {
 
       pending = {
         callback,
-        audioRequested: Boolean(request.audioRequested)
+        audioRequested: Boolean(request.audioRequested),
+        sharkExcludePid: osPidExcludeSharkAudio(request)
       };
 
       openPickerUi(parentWindowFromRequest(request), Boolean(request.audioRequested));
@@ -131,7 +165,7 @@ function createDisplayMediaPickerController({ srcDir }) {
         };
       }
 
-      const { audioRequested, callback: cb } = pending;
+      const { audioRequested, callback: cb, sharkExcludePid } = pending;
       pending = null;
 
       const sources = await desktopCapturer.getSources({
@@ -141,6 +175,7 @@ function createDisplayMediaPickerController({ srcDir }) {
       });
       const video = sources.find((s) => s.id === sourceId);
       if (!video) {
+        stopApplicationLoopbackChild();
         cb({});
         closePicker();
         return { ok: false, error: 'Источник больше не доступен.' };
@@ -150,13 +185,23 @@ function createDisplayMediaPickerController({ srcDir }) {
       const streams = { video };
       if (audioRequested) {
         streams.audio = 'loopback';
-      }
+        if (process.platform === 'win32') {
+          const exePath = resolveApplicationLoopbackExe(srcDir);
+          startApplicationLoopbackForDesktopShare({
+            exePath,
+            isScreen: video.id.startsWith('screen:'),
+            windowSourceId: video.id,
+            sharkExcludePid: sharkExcludePid ?? 0
+          });
+        } else stopApplicationLoopbackChild();
+      } else stopApplicationLoopbackChild();
       cb(streams);
       closePicker();
       return { ok: true };
     });
 
     ipcMain.handle('desktop:display-media:cancel', async () => {
+      stopApplicationLoopbackChild();
       if (pending) {
         const cb = pending.callback;
         pending = null;
@@ -165,9 +210,13 @@ function createDisplayMediaPickerController({ srcDir }) {
       closePicker();
       return { ok: true };
     });
+    ipcMain.handle('desktop:application-loopback-stop', async () => {
+      stopApplicationLoopbackChild();
+      return { ok: true };
+    });
   }
 
-  return { registerIpc, registerSessionHandler };
+  return { registerIpc, registerSessionHandler, stopApplicationLoopbackChild };
 }
 
 export { createDisplayMediaPickerController };

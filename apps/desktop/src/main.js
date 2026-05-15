@@ -20,6 +20,10 @@ app.whenReady().then(() => {
   });
 });
 
+app.on('before-quit', () => {
+  displayPicker.stopApplicationLoopbackChild();
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

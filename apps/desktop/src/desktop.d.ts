@@ -4,6 +4,7 @@ declare global {
   interface Window {
     desktop?: {
       platform: NodeJS.Platform;
+      applicationLoopbackStop?: () => Promise<{ ok: boolean }>;
       displayMediaPicker?: {
         listSources: () => Promise<
           {
