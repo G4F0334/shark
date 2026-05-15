@@ -15,6 +15,7 @@ import {
 } from '@/helpers/audio-worklet/noise-gate-worklet';
 import { createNsChain } from '@/helpers/audio-worklet/ns-worklet';
 
+import { createApplicationLoopbackPcmAudioTrack } from '@/helpers/application-loopback-pcm-audio-track';
 import { logVoice } from '@/helpers/browser-logger';
 import {
   getRestrictOwnAudioSupport,
@@ -161,6 +162,10 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     ConnectionStatus.DISCONNECTED
   );
   const routerRtpCapabilities = useRef<RtpCapabilities | null>(null);
+  /** Закрытие AudioContext + IPC при демке со звуком из ApplicationLoopback.exe (stdout PCM). */
+  const screenShareApplicationLoopbackDisposeRef = useRef<
+    (() => Promise<void>) | undefined
+  >(undefined);
   const audioVideoRefsMap = useRef<Map<number, AudioVideoRefs>>(new Map());
   const previousVoiceChannelIdRef = useRef<number | undefined>(undefined);
   const currentVoiceChannelId = useCurrentVoiceChannelId();
@@ -595,9 +600,16 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     setLocalVideoStream(undefined);
   }, [localVideoStream, setLocalVideoStream, localVideoProducer]);
 
+  const disposeScreenShareApplicationLoopbackAudio = useCallback(async () => {
+    const d = screenShareApplicationLoopbackDisposeRef.current;
+    screenShareApplicationLoopbackDisposeRef.current = undefined;
+    if (d) await d();
+  }, []);
+
   const stopScreenShareStream = useCallback(() => {
     logVoice('Stopping screen share stream');
 
+    void disposeScreenShareApplicationLoopbackAudio();
     void window.desktop?.applicationLoopbackStop?.();
 
     localScreenShareStream?.getTracks().forEach((track) => {
@@ -613,6 +625,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     setScreenShareProducer(null);
     setLocalScreenShare(undefined);
   }, [
+    disposeScreenShareApplicationLoopbackAudio,
     localScreenShareStream,
     setLocalScreenShare,
     localScreenShareProducer,
@@ -656,11 +669,59 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
         displayMediaConstraints
       );
 
+      let audioTrack: MediaStreamTrack | undefined = stream.getAudioTracks()[0];
+      let routeAudio: 'application-loopback' | 'chromium-loopback' | 'none' =
+        'none';
+      const routePromise = window.desktop?.consumeDisplayMediaAudioRoute?.();
+      if (
+        typeof routePromise === 'object' &&
+        routePromise !== null &&
+        'then' in routePromise &&
+        typeof routePromise.then === 'function'
+      ) {
+        const r = await routePromise;
+        const ar = r?.audioRoute;
+        if (
+          ar === 'application-loopback' ||
+          ar === 'chromium-loopback' ||
+          ar === 'none'
+        ) {
+          routeAudio = ar;
+        }
+      }
+      logVoice('Display media audio route', { routeAudio });
+
+      if (routeAudio === 'application-loopback') {
+        for (const t of [...stream.getAudioTracks()]) {
+          stream.removeTrack(t);
+          t.stop();
+        }
+        audioTrack = undefined;
+        const sub = window.desktop?.subscribeApplicationLoopbackPcm;
+        const pcmReady = window.desktop?.applicationLoopbackPcmConsumerReady;
+        if (!sub || !pcmReady) {
+          stream.getTracks().forEach((t) => {
+            t.stop();
+          });
+          throw new Error('ApplicationLoopback PCM bridge unavailable');
+        }
+        const { track, dispose } =
+          await createApplicationLoopbackPcmAudioTrack({
+            subscribe: sub,
+            signalConsumerReady: () =>
+              pcmReady().then(() => {
+                /**/
+              })
+          });
+        screenShareApplicationLoopbackDisposeRef.current = dispose;
+        audioTrack = track;
+        stream.addTrack(track);
+      }
+
       logVoice('Screen share stream obtained', { stream });
       setLocalScreenShare(stream);
 
       const videoTrack = stream.getVideoTracks()[0];
-      const audioTrack = stream.getAudioTracks()[0];
 
       if (videoTrack) {
         logVoice('Obtained video track', { videoTrack });
@@ -723,6 +784,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
         videoTrack.onended = () => {
           logVoice('Screen share track ended, cleaning up screen share');
 
+          void disposeScreenShareApplicationLoopbackAudio();
+
           localScreenShareStream?.getTracks().forEach((track) => {
             track.stop();
           });
@@ -763,6 +826,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
       throw error;
     }
   }, [
+    disposeScreenShareApplicationLoopbackAudio,
     setLocalScreenShare,
     localScreenShareProducer,
     localScreenShareAudioProducer,
@@ -780,6 +844,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
   const cleanup = useCallback(() => {
     logVoice('Running voice provider cleanup');
 
+    void disposeScreenShareApplicationLoopbackAudio();
+
     stopMonitoring();
     resetStats();
     cleanupMicProcessingResources();
@@ -790,6 +856,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
 
     setConnectionStatus(ConnectionStatus.DISCONNECTED);
   }, [
+    disposeScreenShareApplicationLoopbackAudio,
     stopMonitoring,
     resetStats,
     cleanupMicProcessingResources,
@@ -813,6 +880,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
 
       try {
         setLoading(true);
+
         setConnectionStatus(ConnectionStatus.CONNECTING);
 
         routerRtpCapabilities.current = incomingRouterRtpCapabilities;

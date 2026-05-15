@@ -22,7 +22,12 @@ function createMainWindow({ srcDir }) {
 
   win.once('ready-to-show', () => win.show());
 
-  win.loadURL('http://localhost:5173');
+  if (process.env.SHARKORD_ENV === 'development') {
+    win.loadURL('http://localhost:5173');
+  } else {
+    win.loadURL('https://sharkapi.ping-net.kz/');
+  }
+
   return win;
 }
 

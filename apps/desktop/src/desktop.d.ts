@@ -5,6 +5,29 @@ declare global {
     desktop?: {
       platform: NodeJS.Platform;
       applicationLoopbackStop?: () => Promise<{ ok: boolean }>;
+      applicationLoopbackPcmConsumerReady?: () => Promise<{ ok: boolean }>;
+      consumeDisplayMediaAudioRoute?: () => Promise<{
+        audioRoute: 'application-loopback' | 'chromium-loopback' | 'none';
+      }>;
+      /** Подписка на PCM с main; возвращает unsubscribe. */
+      subscribeApplicationLoopbackPcm?: (
+        onData: (data: ArrayBuffer) => void,
+        onEnd: () => void
+      ) => () => void;
+      applicationLoopbackGetDiagnostics?: () => Promise<{
+        ok: boolean;
+        diagnostics: {
+          exePath: string;
+          exeExists: boolean;
+          childRunning: boolean;
+          childPid: number | null;
+          lastArgv: readonly string[];
+          lastSpawnUnixMs: number | null;
+          lastExitCode: number | null;
+          lastExitSignal: string | null;
+          lastIssue: string | null;
+        };
+      }>;
       displayMediaPicker?: {
         listSources: () => Promise<
           {

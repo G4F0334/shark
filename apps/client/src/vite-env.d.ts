@@ -23,6 +23,19 @@ declare global {
     __SHARKORD_REACT_JSX_DEV__: typeof import('react/jsx-dev-runtime');
     __SHARKORD_REACT_DOM__: typeof import('react-dom');
     __SHARKORD_REACT_DOM_CLIENT__: typeof import('react-dom/client');
+
+    desktop?: {
+      platform?: string;
+      applicationLoopbackStop?: () => Promise<{ ok: boolean }>;
+      applicationLoopbackPcmConsumerReady?: () => Promise<{ ok: boolean }>;
+      consumeDisplayMediaAudioRoute?: () => Promise<{
+        audioRoute: 'application-loopback' | 'chromium-loopback' | 'none';
+      }>;
+      subscribeApplicationLoopbackPcm?: (
+        onData: (data: ArrayBuffer) => void,
+        onEnd: () => void
+      ) => () => void;
+    };
   }
 
   const VITE_APP_VERSION: string;

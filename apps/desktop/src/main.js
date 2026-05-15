@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { applyWebRtcGpuEncodingPreferences } from './apply-webrtc-gpu-switches.js';
 import { createDisplayMediaPickerController } from './display-media-picker.js';
 import { createMainWindow } from './create-main-window.js';
+import { installKnownChromiumStderrIgnore } from './ignore-known-chromium-stderr.js';
+
+installKnownChromiumStderrIgnore();
 
 applyWebRtcGpuEncodingPreferences();
 
