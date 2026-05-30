@@ -9,7 +9,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --SHARKORD_ENV=development",
+    "dev": "cross-env SHARKORD_ENV=development electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
@@ -20,5 +20,11 @@
   "devDependencies": {
     "electron": "^34.5.8",
     "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "cross-env": "^10.1.0",
+    "electron-store": "^11.0.2",
+    "events": "^3.3.0",
+    "uiohook-napi": "^1.5.5"
   }
 }

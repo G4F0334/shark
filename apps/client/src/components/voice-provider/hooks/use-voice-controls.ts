@@ -206,6 +206,8 @@ const useVoiceControls = ({
     stopScreenShareStream
   ]);
 
+  (globalThis as any).toggleMicG = toggleMic;
+
   return {
     toggleMic,
     toggleSound,

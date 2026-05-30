@@ -2,6 +2,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
+  isElectron: true,
+  voiceActivity: (status) => ipcRenderer.invoke('desktop:voice-activity', status),
+  reloadHotkeys: (keys) => ipcRenderer.invoke('desktop:reload-hotkeys', keys),
   applicationLoopbackStop: () =>
     ipcRenderer.invoke('desktop:application-loopback-stop'),
   applicationLoopbackGetDiagnostics: () =>
@@ -12,7 +15,7 @@ contextBridge.exposeInMainWorld('desktop', {
     ipcRenderer.invoke('desktop:consume-display-media-audio-route'),
   subscribeApplicationLoopbackPcm: (onData, onEnd) => {
     if (typeof onData !== 'function' || typeof onEnd !== 'function') {
-      return () => {};
+      return () => { };
     }
     const onChunk = (_e, payload) => {
       const buf = Buffer.isBuffer(payload)
