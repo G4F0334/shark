@@ -5,10 +5,8 @@ import { RunWebCode } from './main.js';
 let hotkeys = [];
 
 export function loadHotKeys(keys) {
-    console.log("Loading hotkeys", keys);
     try {
         hotkeys = JSON.parse(keys);
-        console.log("Loaded hotkeys", hotkeys);
     } catch (err) {
         hotkeys = [];
         console.error("Failed to parse hotkeys", err);
@@ -17,6 +15,12 @@ export function loadHotKeys(keys) {
 
 ipcMain.handle('desktop:reload-hotkeys', async (self, keys) => {
     loadHotKeys(keys)
+    return { ok: true };
+});
+
+ipcMain.handle('desktop:change-hotkey', async (self, newHotkey) => {
+    console.log("Changing hotkey", newHotkey);
+    hotkeys.find(h => h.id === newHotkey.id).keys = newHotkey.keys;
     return { ok: true };
 });
 
@@ -77,7 +81,12 @@ uIOhook.on("keydown", (e) => {
     if (bind)
         return;
 
-    pressedKeys.add(KEY_MAP[e.keycode]);
+    const key = KEY_MAP[e.keycode];
+
+    if (!key)
+        return;
+
+    pressedKeys.add(key);
 
     for (const h of hotkeys) {
         const allPressed = h.keys.every(k => {
@@ -101,7 +110,7 @@ uIOhook.on("keyup", (e) => {
     })
 
     if (someKeysPressed) {
-        RunWebCode(`toggleMicG()`);
+        RunWebCode(`RunHotkey("` + bind.id + `")`);
         bind = null;
     }
 });

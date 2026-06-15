@@ -78,13 +78,17 @@ export function CloseState(mainWindow) {
 }
 
 let status = 'inactive';
+let oldStatus = 'inactive';
 
 ipcMain.handle('desktop:voice-activity', async (self, state) => {
     status = state;
-    console.log("Voice activity state:", state);
+    // console.log("Voice activity state:", state);
 });
 
 setInterval(() => {
-    const icon = getImageStatus(status);
-    tray.setImage(icon);
-}, 50)
+    if (status !== oldStatus) {
+        oldStatus = status;
+        const icon = getImageStatus(status);
+        tray.setImage(icon);
+    }
+}, 10)

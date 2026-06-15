@@ -1,6 +1,12 @@
+import type { ConnectionStatus } from ".";
+
 type TVoiceControlsBridge = {
   setMicMuted: (muted: boolean) => Promise<void>;
   setSoundMuted: (muted: boolean) => Promise<void>;
+
+  connectionStatus: ConnectionStatus;
+  toggleMic: boolean;
+  toggleSound: boolean;
 };
 
 // Server settings screens are rendered from a top-level portal and may live

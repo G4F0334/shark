@@ -1,5 +1,7 @@
 import { useOwnVoiceUser } from '@/features/server/hooks';
-import { useEffect, useRef, useState } from 'react';
+import { useOwnUser } from '@/features/server/users/hooks';
+import { useVoice } from '@/features/server/voice/hooks';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 // speaking intensity level (0 = silent, 1 = quiet, 2 = normal, 3 = loud)
 // this might need to be optimized
@@ -31,6 +33,32 @@ const useAudioLevel = (audioStream: MediaStream | undefined) => {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const ownVoiceUser = useOwnVoiceUser();
+
+  const {
+    ownVoiceState,
+    connectionStatus,
+  } = useVoice();
+
+  const status = useMemo(() => {
+    if (connectionStatus !== "connected") {
+      return "inactive";
+    }
+
+    if (isSpeaking) return "speaking";
+    if (ownVoiceState.micMuted) return "micmuted";
+    if (ownVoiceState.soundMuted) return "soundmute";
+
+    return "active";
+  }, [
+    connectionStatus,
+    isSpeaking,
+    ownVoiceState.micMuted,
+    ownVoiceState.soundMuted
+  ]);
+
+  useEffect(() => {
+    window.desktop?.voiceActivity?.(status);
+  }, [status]);
 
   useEffect(() => {
     if (!audioStream || ownVoiceUser?.state.soundMuted) {
@@ -79,7 +107,7 @@ const useAudioLevel = (audioStream: MediaStream | undefined) => {
         setAudioLevel(normalizedLevel);
         setIsSpeaking(normalizedLevel > SPEAKING_THRESHOLD);
 
-        animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
+        setTimeout(checkAudioLevel, 10);
       };
 
       checkAudioLevel();

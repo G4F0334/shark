@@ -5,23 +5,12 @@ import { useSpeakingState, useVoice } from '@/features/server/voice/hooks';
 import { cn } from '@/lib/utils';
 import { ChannelPermission } from '@sharkord/shared';
 import { Button } from '@sharkord/ui';
-import {
-  AlertTriangle,
-  Loader2,
-  Monitor,
-  MonitorOff,
-  PhoneOff,
-  Video,
-  VideoOff,
-  Wifi,
-  WifiOff
-} from 'lucide-react';
+import { AlertTriangle, Loader2, Monitor, MonitorOff, PhoneOff, Video, VideoOff, Wifi, WifiOff } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExternalAudioStreams } from '../channel-view/voice/external-audio-streams';
 import { VoiceAudioStreams } from '../channel-view/voice/voice-audio-streams';
 import { StatsPopover } from './stats-popover';
-import { useOwnUser } from '@/features/server/users/hooks';
 
 const VoiceControl = memo(() => {
   const { t } = useTranslation('sidebar');
@@ -34,23 +23,6 @@ const VoiceControl = memo(() => {
     connectionStatus,
     isScreenShareSupported
   } = useVoice();
-  const me = useOwnUser();
-  if (me) {
-
-    const { isActivelySpeaking } = useSpeakingState(me.id);
-
-    let status = connectionStatus === 'connected' ? // 'inactive' | 'active' | 'speaking' | 'micmuted' | 'soundmute'
-      isActivelySpeaking
-        ? 'speaking'
-        : ownVoiceState.micMuted
-          ? 'micmuted'
-          : ownVoiceState.soundMuted
-            ? 'soundmute'
-            : 'active'
-      : 'inactive';
-
-    window.desktop?.voiceActivity?.(status);
-  }
 
   const connectionInfo = useMemo(() => {
     switch (connectionStatus) {

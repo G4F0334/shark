@@ -73,7 +73,7 @@ type AudioVideoRefs = {
 
 export type { AudioVideoRefs };
 
-enum ConnectionStatus {
+export enum ConnectionStatus {
   DISCONNECTED = 'disconnected',
   CONNECTING = 'connecting',
   CONNECTED = 'connected',
@@ -950,7 +950,11 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
   useEffect(() => {
     setVoiceControlsBridge({
       setMicMuted: setMicMutedForBridge,
-      setSoundMuted: setSoundMutedForBridge
+      setSoundMuted: setSoundMutedForBridge,
+
+      connectionStatus: connectionStatus,
+      toggleMic: ownVoiceState.micMuted,
+      toggleSound: ownVoiceState.soundMuted,
     });
 
     return () => {

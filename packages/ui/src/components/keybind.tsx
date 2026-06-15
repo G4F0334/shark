@@ -5,39 +5,8 @@ type TKeyBindProps = {
     id: string;
     label: string;
     className?: string;
-};
-
-export type HotKey = {
-    id: string;
-    keys: string[];
-};
-
-const loadHotkeys = (): HotKey[] => {
-    const data = localStorage.getItem("hotkeys");
-    if (data) {
-        try {
-            return JSON.parse(data);
-        } catch {
-            return [];
-        }
-    }
-    return [];
-}
-
-const saveHotkey = (keys: HotKey) => {
-    const existing = loadHotkeys();
-    const find = existing.find(k => k.id == keys.id);
-
-    if (find) {
-        find.keys = keys.keys;
-    } else {
-        existing.push(keys);
-    }
-
-    localStorage.setItem(
-        "hotkeys",
-        JSON.stringify(existing)
-    );
+    current?: string[];
+    onChange?: (id: string, keys: string[]) => void;
 };
 
 const normalizeCode = (code: string) => {
@@ -52,12 +21,12 @@ const normalizeCode = (code: string) => {
     return code;
 };
 
-function KeyBind({ id, label }: TKeyBindProps) {
+function KeyBind({ id, label, current, onChange }: TKeyBindProps) {
     const [recording, setRecording] = useState(false);
     const [hotkey, setHotkey] = useState([] as string[]);
 
     useEffect(() => {
-        const keys = loadHotkeys().find(k => k.id === id)?.keys
+        const keys = current || [];
 
         console.log("Loaded hotkeys", keys);
 
@@ -101,10 +70,16 @@ function KeyBind({ id, label }: TKeyBindProps) {
     };
 
     const handleKeyUp = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        saveHotkey({
-            id,
-            keys: hotkey,
-        });
+        
+
+        if ((window as any).desktop && typeof (window as any).desktop?.changeHotkey === "function") {
+            (window as any).desktop?.changeHotkey({
+                id,
+                keys: hotkey,
+            });
+        }
+
+        onChange?.(id, hotkey);
         e.currentTarget.blur();
     };
 

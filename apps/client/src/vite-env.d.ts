@@ -29,6 +29,7 @@ declare global {
       isElectron?: boolean;
       voiceActivity?: (status: string) => Promise<void>;
       reloadHotkeys?: (keys: string) => Promise<{ ok: boolean }>;
+      changeHotkey?: (newHotkey: any) => Promise<void>;
       applicationLoopbackStop?: () => Promise<{ ok: boolean }>;
       applicationLoopbackPcmConsumerReady?: () => Promise<{ ok: boolean }>;
       consumeDisplayMediaAudioRoute?: () => Promise<{

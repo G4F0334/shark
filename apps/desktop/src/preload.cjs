@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('desktop', {
   isElectron: true,
   voiceActivity: (status) => ipcRenderer.invoke('desktop:voice-activity', status),
   reloadHotkeys: (keys) => ipcRenderer.invoke('desktop:reload-hotkeys', keys),
+  changeHotkey: (newHotkey) => ipcRenderer.invoke('desktop:change-hotkey', newHotkey),
   applicationLoopbackStop: () =>
     ipcRenderer.invoke('desktop:application-loopback-stop'),
   applicationLoopbackGetDiagnostics: () =>

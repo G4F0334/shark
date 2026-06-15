@@ -13,6 +13,7 @@ function createMainWindow({ srcDir }) {
     minHeight: 600,
     webPreferences: {
       preload: path.join(srcDir, 'preload.cjs'),
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
