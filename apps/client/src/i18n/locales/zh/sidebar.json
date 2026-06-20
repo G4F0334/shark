@@ -11,6 +11,7 @@
   "deafen": "静音 (Ctrl+Shift+D)",
   "userSettings": "用户设置",
   "voiceConnecting": "连接中...",
+  "serverConnectionLost": "连接已断开",
   "voiceConnected": "语音已连接",
   "voiceFailed": "连接失败",
   "voiceDisconnected": "已断开",

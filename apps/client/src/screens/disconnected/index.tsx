@@ -1,9 +1,9 @@
-import { setDisconnectInfo } from '@/features/server/actions';
+import { retryServerConnection, setDisconnectInfo } from '@/features/server/actions';
 import type { TDisconnectInfo } from '@/features/server/types';
 import { DisconnectCode } from '@sharkord/shared';
 import { Button } from '@sharkord/ui';
 import { AlertCircle, Gavel, RefreshCw, WifiOff } from 'lucide-react';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type TDisconnectedProps = {
@@ -12,6 +12,7 @@ type TDisconnectedProps = {
 
 const Disconnected = memo(({ info }: TDisconnectedProps) => {
   const { t } = useTranslation('disconnected');
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const disconnectType = useMemo(() => {
     const code = info.code;
@@ -42,9 +43,17 @@ const Disconnected = memo(({ info }: TDisconnectedProps) => {
     };
   }, [info, t]);
 
-  const handleReconnect = useCallback(() => {
-    setDisconnectInfo(undefined);
-  }, []);
+  const handleReconnect = useCallback(async () => {
+    setIsReconnecting(true);
+
+    try {
+      await retryServerConnection();
+    } catch {
+      setDisconnectInfo(info);
+    } finally {
+      setIsReconnecting(false);
+    }
+  }, [info]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -63,10 +72,13 @@ const Disconnected = memo(({ info }: TDisconnectedProps) => {
         {disconnectType.canReconnect && (
           <Button
             onClick={handleReconnect}
+            disabled={isReconnecting}
             className="inline-flex items-center gap-2"
           >
-            <RefreshCw className="h-4 w-4" />
-            {t('goToConnectScreen')}
+            <RefreshCw
+              className={`h-4 w-4 ${isReconnecting ? 'animate-spin' : ''}`}
+            />
+            {isReconnecting ? t('reconnecting') : t('reconnect')}
           </Button>
         )}
 

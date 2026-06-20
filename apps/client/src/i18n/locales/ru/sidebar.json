@@ -11,6 +11,7 @@
   "deafen": "Отключить звук (Ctrl+Shift+D)",
   "userSettings": "Настройки пользователя",
   "voiceConnecting": "Подключение...",
+  "serverConnectionLost": "Соединение потеряно",
   "voiceConnected": "Голосовое соединение",
   "voiceFailed": "Соединение не удалось",
   "voiceDisconnected": "Отключено",

@@ -6,6 +6,7 @@ import { ThreadSidebar } from '@/components/thread-sidebar';
 import { TopBar } from '@/components/top-bar';
 import { VoiceChatSidebar } from '@/components/voice-chat-sidebar';
 import { VoiceProvider } from '@/components/voice-provider';
+import { VoiceReconnectController } from '@/components/voice-reconnect-controller';
 import { useSelectedDmChannelId, useThreadSidebar } from '@/features/app/hooks';
 import { setDmsOpen } from '@/features/server/actions';
 import { setSelectedChannelId } from '@/features/server/channels/actions';
@@ -76,6 +77,7 @@ const ServerView = memo(() => {
 
   return (
     <VoiceProvider>
+      <VoiceReconnectController />
       <div
         data-testid={TestId.SERVER_VIEW}
         className="flex h-dvh flex-col bg-background text-foreground dark"

@@ -11,6 +11,7 @@ import {
   connectedSelector,
   connectingSelector,
   disconnectInfoSelector,
+  isServerReconnectingSelector,
   dmsOpenSelector,
   hasSharingScreenUsersSelector,
   hasUnreadMentionsSelector,
@@ -31,6 +32,9 @@ import {
 export const useIsConnected = () => useSelector(connectedSelector);
 
 export const useIsConnecting = () => useSelector(connectingSelector);
+
+export const useIsServerReconnecting = () =>
+  useSelector(isServerReconnectingSelector);
 
 export const useDisconnectInfo = () => useSelector(disconnectInfoSelector);
 

@@ -11,6 +11,7 @@
   "deafen": "Silenzia audio in ingresso (Ctrl+Shift+D)",
   "userSettings": "Impostazioni utente",
   "voiceConnecting": "Connessione...",
+  "serverConnectionLost": "Connessione persa",
   "voiceConnected": "Voce connessa",
   "voiceFailed": "Connessione fallita",
   "voiceDisconnected": "Disconnesso",

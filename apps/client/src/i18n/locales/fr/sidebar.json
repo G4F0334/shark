@@ -11,6 +11,7 @@
   "deafen": "Couper le son (Ctrl+Maj+D)",
   "userSettings": "Paramètres utilisateur",
   "voiceConnecting": "Connexion en cours...",
+  "serverConnectionLost": "Connexion perdue",
   "voiceConnected": "Connecté en vocal",
   "voiceFailed": "Échec de la connexion",
   "voiceDisconnected": "Déconnecté",

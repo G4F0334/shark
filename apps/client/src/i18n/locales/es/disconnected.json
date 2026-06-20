@@ -4,6 +4,8 @@
   "connectionLost": "Conexión perdida",
   "noReasonProvided": "No se proporcionó un motivo.",
   "lostConnectionMessage": "Se perdió la conexión con el servidor inesperadamente.",
+  "reconnect": "Intentar reconectar",
+  "reconnecting": "Reconectando...",
   "goToConnectScreen": "Ir a la pantalla de conexión",
   "details": "Detalles",
   "code": "Código: {{code}}",

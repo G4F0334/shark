@@ -4,6 +4,8 @@
   "connectionLost": "Connexion perdue",
   "noReasonProvided": "Aucune justification n'a été fournie.",
   "lostConnectionMessage": "Connexion avec le serveur perdue.",
+  "reconnect": "Réessayer la connexion",
+  "reconnecting": "Reconnexion...",
   "goToConnectScreen": "Accéder à l'écran de connexion",
   "details": "Détails",
   "code": "Code : {{code}}",

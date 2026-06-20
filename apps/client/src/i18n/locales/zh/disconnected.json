@@ -4,6 +4,8 @@
   "connectionLost": "连接断开",
   "noReasonProvided": "未提供原因。",
   "lostConnectionMessage": "与服务器的连接意外断开。",
+  "reconnect": "重新连接",
+  "reconnecting": "正在连接...",
   "goToConnectScreen": "前往连接页面",
   "details": "详情",
   "code": "代码：{{code}}",

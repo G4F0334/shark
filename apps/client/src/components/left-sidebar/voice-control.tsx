@@ -1,5 +1,5 @@
 import { useCurrentVoiceChannelId } from '@/features/server/channels/hooks';
-import { useChannelCan } from '@/features/server/hooks';
+import { useChannelCan, useIsServerReconnecting } from '@/features/server/hooks';
 import { leaveVoice } from '@/features/server/voice/actions';
 import { useSpeakingState, useVoice } from '@/features/server/voice/hooks';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ const VoiceControl = memo(() => {
   const { t } = useTranslation('sidebar');
   const voiceChannelId = useCurrentVoiceChannelId();
   const channelCan = useChannelCan(voiceChannelId);
+  const isServerReconnecting = useIsServerReconnecting();
   const {
     ownVoiceState,
     toggleWebcam,
@@ -25,6 +26,14 @@ const VoiceControl = memo(() => {
   } = useVoice();
 
   const connectionInfo = useMemo(() => {
+    if (isServerReconnecting) {
+      return {
+        icon: <WifiOff className="h-4 w-4 text-yellow-500" />,
+        text: t('serverConnectionLost'),
+        color: 'text-yellow-500'
+      };
+    }
+
     switch (connectionStatus) {
       case 'connecting':
         return {
@@ -52,7 +61,7 @@ const VoiceControl = memo(() => {
           color: 'text-red-500'
         };
     }
-  }, [connectionStatus, t]);
+  }, [connectionStatus, isServerReconnecting, t]);
 
   if (!voiceChannelId) {
     return null;

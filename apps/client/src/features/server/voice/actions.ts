@@ -140,6 +140,32 @@ export const updateOwnVoiceState = (
   store.dispatch(serverSliceActions.updateOwnVoiceState(newState));
 };
 
+export const returnJoinVoice = async (): Promise<RtpCapabilities | undefined> => {
+  const state = store.getState();
+  const channelId = currentVoiceChannelIdSelector(state);
+
+  if (!channelId) {
+    logVoice('Return join voice requested without active channel');
+    return undefined;
+  }
+
+  const { micMuted, soundMuted } = ownVoiceStateSelector(state);
+  const client = getTRPCClient();
+
+  try {
+    const { routerRtpCapabilities } = await client.voice.join.mutate({
+      channelId,
+      state: { micMuted, soundMuted }
+    });
+
+    return routerRtpCapabilities;
+  } catch (error) {
+    toast.error(getTrpcError(error, 'Failed to return join voice channel'));
+  }
+
+  return undefined;
+};
+
 export const joinVoice = async (
   channelId: number
 ): Promise<RtpCapabilities | undefined> => {

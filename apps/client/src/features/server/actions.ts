@@ -1,25 +1,31 @@
 import { Dialog } from '@/components/dialogs/dialogs';
 import { logDebug } from '@/helpers/browser-logger';
 import { getHostFromServer } from '@/helpers/get-file-url';
-import { cleanup, connectToTRPC, getTRPCClient } from '@/lib/trpc';
+import { cleanup, connectToTRPC, getTRPCClient, retryConnection } from '@/lib/trpc';
 import type { TMessageJumpToTarget } from '@/types';
 import { type TPublicServerSettings, type TServerInfo } from '@sharkord/shared';
+import type { RtpCapabilities } from 'mediasoup-client/types';
 import { toast } from 'sonner';
 import { setMessageJumpTarget, setSelectedDmChannelId } from '../app/actions';
 import { openDialog } from '../dialogs/actions';
 import { store } from '../store';
 import { setSelectedChannelId } from './channels/actions';
-import {
-  processPluginComponents,
-  setPluginCommands,
-  setPluginComponents
-} from './plugins/actions';
+import { currentVoiceChannelIdSelector } from './channels/selectors';
+import { processPluginComponents, setPluginCommands, setPluginComponents } from './plugins/actions';
 import { infoSelector } from './selectors';
 import { serverSliceActions } from './slice';
 import { initSubscriptions } from './subscriptions';
 import { type TDisconnectInfo } from './types';
+import { returnJoinVoice } from './voice/actions';
 
 let unsubscribeFromServer: (() => void) | null = null;
+
+type TVoiceReconnectHandler = (
+  rtpCapabilities: RtpCapabilities,
+  channelId: number
+) => Promise<void>;
+
+let voiceReconnectHandler: TVoiceReconnectHandler | null = null;
 
 export const setConnected = (status: boolean) => {
   store.dispatch(serverSliceActions.setConnected(status));
@@ -33,8 +39,76 @@ export const setDisconnectInfo = (info: TDisconnectInfo | undefined) => {
   store.dispatch(serverSliceActions.setDisconnectInfo(info));
 };
 
+export const unsubscribeServerEvents = () => {
+  unsubscribeFromServer?.();
+  unsubscribeFromServer = null;
+};
+
+export const softDisconnectFromServer = (info: TDisconnectInfo) => {
+  unsubscribeServerEvents();
+  setServerReconnecting(false);
+  store.dispatch(serverSliceActions.setConnected(false));
+  store.dispatch(serverSliceActions.setDisconnectInfo(info));
+};
+
+export const onReconnectSuccess = () => {
+  setDisconnectInfo(undefined);
+  setServerReconnecting(false);
+};
+
+export const setVoiceReconnectHandler = (
+  handler: TVoiceReconnectHandler | null
+) => {
+  voiceReconnectHandler = handler;
+
+  if (handler) {
+    void runPendingVoiceReconnect();
+  }
+};
+
+let pendingVoiceReconnect = false;
+
+export const restoreVoiceAfterReconnect = async (): Promise<void> => {
+  pendingVoiceReconnect = true;
+  await runPendingVoiceReconnect();
+};
+
+const runPendingVoiceReconnect = async (): Promise<void> => {
+  if (!pendingVoiceReconnect || !voiceReconnectHandler) return;
+
+  pendingVoiceReconnect = false;
+
+  const rtpCapabilities = await returnJoinVoice();
+
+  if (!rtpCapabilities) return;
+
+  const channelId = currentVoiceChannelIdSelector(store.getState());
+
+  if (!channelId) return;
+
+  await voiceReconnectHandler(rtpCapabilities, channelId);
+};
+
+export const retryServerConnection = async (): Promise<void> => {
+  try {
+    await retryConnection();
+  } catch (error) {
+    setServerReconnecting(false);
+
+    const message =
+      error instanceof Error ? error.message : 'Failed to reconnect';
+
+    toast.error(message);
+    throw error;
+  }
+};
+
 export const setConnecting = (status: boolean) => {
   store.dispatch(serverSliceActions.setConnecting(status));
+};
+
+export const setServerReconnecting = (status: boolean) => {
+  store.dispatch(serverSliceActions.setServerReconnecting(status));
 };
 
 export const setServerId = (id: string) => {
@@ -112,7 +186,6 @@ export const joinServer = async (handshakeHash: string, password?: string) => {
 
 export const disconnectFromServer = () => {
   cleanup();
-  unsubscribeFromServer?.();
 };
 
 export const jumpToMessage = (target: TMessageJumpToTarget) => {

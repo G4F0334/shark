@@ -11,6 +11,7 @@
   "deafen": "Ensordecer (Ctrl+Shift+D)",
   "userSettings": "Ajustes de usuario",
   "voiceConnecting": "Conectando...",
+  "serverConnectionLost": "Conexión perdida",
   "voiceConnected": "Voz conectada",
   "voiceFailed": "Conexión fallida",
   "voiceDisconnected": "Desconectado",
