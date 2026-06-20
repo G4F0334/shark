@@ -25,6 +25,7 @@ import {
 import { getResWidthHeight } from '@/helpers/get-res-with-height';
 import { pickScreenShareH264Codec } from '@/helpers/pick-screen-share-h264-codec';
 import { useScreenShareSupport } from '@/hooks/use-screen-share-support';
+import { useOwnVoiceTrayActivity } from './hooks/use-own-voice-tray-activity';
 import { getTRPCClient } from '@/lib/trpc';
 import { NoiseSuppression, VideoCodec } from '@/types';
 import {
@@ -156,6 +157,12 @@ const VoiceProviderContext = createContext<TVoiceProvider>({
 type TVoiceProviderProps = {
   children: React.ReactNode;
 };
+
+const OwnVoiceTrayActivity = memo(() => {
+  useOwnVoiceTrayActivity();
+
+  return null;
+});
 
 const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
   const [loading, setLoading] = useState(false);
@@ -1050,6 +1057,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
 
   return (
     <VoiceProviderContext.Provider value={contextValue}>
+      <OwnVoiceTrayActivity />
       <VolumeControlProvider>
         <div className="relative">
           <FloatingPinnedCard

@@ -1,7 +1,5 @@
 import { useOwnVoiceUser } from '@/features/server/hooks';
-import { useOwnUser } from '@/features/server/users/hooks';
-import { useVoice } from '@/features/server/voice/hooks';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // speaking intensity level (0 = silent, 1 = quiet, 2 = normal, 3 = loud)
 // this might need to be optimized
@@ -26,48 +24,13 @@ const SPEAKING_EFFECT_CLASSES: Record<SpeakingIntensity, string> = {
   [SpeakingIntensity.Loud]: 'speaking-effect-high'
 };
 
-type TUseAudioLevelOptions = {
-  updateTray?: boolean;
-};
-
-const useAudioLevel = (
-  audioStream: MediaStream | undefined,
-  options?: TUseAudioLevelOptions
-) => {
+const useAudioLevel = (audioStream: MediaStream | undefined) => {
   const [audioLevel, setAudioLevel] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const ownVoiceUser = useOwnVoiceUser();
-
-  const {
-    ownVoiceState,
-    connectionStatus,
-  } = useVoice();
-
-  const status = useMemo(() => {
-    if (connectionStatus !== "connected") {
-      return "inactive";
-    }
-
-    if (isSpeaking) return "speaking";
-    if (ownVoiceState.micMuted) return "micmuted";
-    if (ownVoiceState.soundMuted) return "soundmute";
-
-    return "active";
-  }, [
-    connectionStatus,
-    isSpeaking,
-    ownVoiceState.micMuted,
-    ownVoiceState.soundMuted
-  ]);
-
-  useEffect(() => {
-    if (!options?.updateTray) return;
-
-    window.desktop?.voiceActivity?.(status);
-  }, [status, options?.updateTray]);
 
   useEffect(() => {
     if (!audioStream || ownVoiceUser?.state.soundMuted) {
