@@ -12,6 +12,9 @@ files:
 
 asar: true
 
+# uiohook-napi ships NAPI prebuilds (win32-x64, etc.) — no MSVC rebuild needed
+npmRebuild: false
+
 extraResources:
   - from: lib/ApplicationLoopback.exe
     to: lib/ApplicationLoopback.exe

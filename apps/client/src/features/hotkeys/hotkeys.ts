@@ -1,30 +1,32 @@
-import { getVoiceControlsBridge } from "@/components/voice-provider/controls-bridge";
-import { hotkeysList } from "./list";
+import { getVoiceControlsBridge } from '@/components/voice-provider/controls-bridge';
+import { hotkeysList } from './list';
 
-const waitForVoiceControlsBridge = () => {
-    return new Promise((resolve: any) => {
-        const checkBridge = () => {
-            const bridge = getVoiceControlsBridge();
-            if (bridge) {
-                resolve();
-            } else {
-                setTimeout(checkBridge, 100);
-            }
-        };
-        checkBridge();
-    })
+const waitForVoiceControlsBridge = () =>
+  new Promise<void>((resolve) => {
+    const checkBridge = () => {
+      if (getVoiceControlsBridge()) {
+        resolve();
+        return;
+      }
+
+      setTimeout(checkBridge, 100);
+    };
+
+    checkBridge();
+  });
+
+const installRunHotkey = () => {
+  const handler = async (id: string) => {
+    const hotkey = hotkeysList[id as keyof typeof hotkeysList];
+    const bridge = getVoiceControlsBridge();
+
+    if (!hotkey || !bridge) return;
+
+    await hotkey.action(bridge);
+  };
+
+  globalThis.RunHotkey = handler;
+  window.RunHotkey = handler;
 };
 
-waitForVoiceControlsBridge().then(() => {
-    let provide = getVoiceControlsBridge();
-    if (provide) {
-        (globalThis as any).RunHotkey = async (keys: string) => {
-            const hotkey = hotkeysList[keys];
-            if (hotkey) {
-                await hotkey.action(provide);
-                provide = await getVoiceControlsBridge();
-            }
-        };
-    }
-});
-
+void waitForVoiceControlsBridge().then(installRunHotkey);

@@ -20,7 +20,9 @@ import { exposeLibs, exposeReact } from './helpers/exposes.ts';
 import { LocalStorageKey } from './helpers/storage.ts';
 import './index.css';
 import './features/hotkeys/hotkeys.ts';
-import { HotKeyListner } from './components/server-screens/user-settings/hotkeys/index.tsx';
+import { startHotkeyListener } from './features/hotkeys/listener.ts';
+
+startHotkeyListener();
 
 exposeReact();
 exposeLibs();
@@ -48,6 +50,5 @@ createRoot(document.getElementById('root')!).render(
         </DevicesProvider>
       </Provider>
     </ThemeProvider>
-    <HotKeyListner />
   </StrictMode>
 );
