@@ -1,4 +1,4 @@
-import { BrowserWindow, desktopCapturer, ipcMain, session } from 'electron';
+import { BrowserWindow, desktopCapturer, ipcMain } from 'electron';
 import path from 'node:path';
 import {
   attachApplicationLoopbackStdoutPcm,
@@ -8,6 +8,7 @@ import {
   startApplicationLoopbackForDesktopShare,
   stopApplicationLoopbackChild
 } from './application-loopback.js';
+import { getSharkordSession } from './session-config.js';
 
 /**
  * После выбора источника демонстрации — куда брать дорожку SCREEN_AUDIO.
@@ -208,7 +209,7 @@ function createDisplayMediaPickerController({ srcDir }) {
   }
 
   function registerSessionHandler() {
-    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    getSharkordSession().setDisplayMediaRequestHandler((request, callback) => {
       if (pending) {
         denyDisplayMediaCallback(callback);
         return;

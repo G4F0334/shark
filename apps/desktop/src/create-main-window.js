@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import path from 'node:path';
+import { SHARKORD_SESSION_PARTITION } from './session-config.js';
 
 /**
  * @param {object} opts
@@ -17,7 +18,7 @@ function createMainWindow({ srcDir }) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      partition: 'persist:sharkord'
+      partition: SHARKORD_SESSION_PARTITION
     },
     show: false
   });

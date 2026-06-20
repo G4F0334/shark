@@ -26,7 +26,14 @@ const SPEAKING_EFFECT_CLASSES: Record<SpeakingIntensity, string> = {
   [SpeakingIntensity.Loud]: 'speaking-effect-high'
 };
 
-const useAudioLevel = (audioStream: MediaStream | undefined) => {
+type TUseAudioLevelOptions = {
+  updateTray?: boolean;
+};
+
+const useAudioLevel = (
+  audioStream: MediaStream | undefined,
+  options?: TUseAudioLevelOptions
+) => {
   const [audioLevel, setAudioLevel] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -57,8 +64,10 @@ const useAudioLevel = (audioStream: MediaStream | undefined) => {
   ]);
 
   useEffect(() => {
+    if (!options?.updateTray) return;
+
     window.desktop?.voiceActivity?.(status);
-  }, [status]);
+  }, [status, options?.updateTray]);
 
   useEffect(() => {
     if (!audioStream || ownVoiceUser?.state.soundMuted) {

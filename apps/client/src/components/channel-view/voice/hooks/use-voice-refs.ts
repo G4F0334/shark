@@ -86,7 +86,7 @@ const useVoiceRefs = (
   }, [externalStreams, remoteId, isOwnUser]);
 
   const { audioLevel, isSpeaking, speakingIntensity, speakingEffectClass } =
-    useAudioLevel(audioStreamForLevel);
+    useAudioLevel(audioStreamForLevel, { updateTray: isOwnUser });
 
   const userVolumeKey = getUserVolumeKey(remoteId);
   const userVolume = getVolume(userVolumeKey);

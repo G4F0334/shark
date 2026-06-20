@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 const useScreenShareSupport = () => {
   const isSupported = useMemo(() => {
     if (typeof window === 'undefined') return false;
+    if (window.desktop?.isElectron === true) return true;
     if (!navigator.mediaDevices) return false;
 
     return typeof navigator.mediaDevices.getDisplayMedia === 'function';
