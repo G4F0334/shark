@@ -4,6 +4,7 @@ import { SoundType } from '@/features/server/types';
 import { updateOwnVoiceState } from '@/features/server/voice/actions';
 import { useOwnVoiceState } from '@/features/server/voice/hooks';
 import { getTRPCClient } from '@/lib/trpc';
+import { isDisplayMediaUserCancel } from '@/helpers/get-display-media-support';
 import { getTrpcError } from '@sharkord/shared';
 import { useCallback, useRef } from 'react';
 import { toast } from 'sonner';
@@ -152,22 +153,16 @@ const useVoiceControls = ({
     if (isTogglingScreenShare.current) return;
     isTogglingScreenShare.current = true;
 
-    const newState = !ownVoiceState.sharingScreen;
+    const turningOn = !ownVoiceState.sharingScreen;
     const trpc = getTRPCClient();
 
-    updateOwnVoiceState({ sharingScreen: newState });
-
-    playSound(
-      newState
-        ? SoundType.OWN_USER_STARTED_SCREENSHARE
-        : SoundType.OWN_USER_STOPPED_SCREENSHARE
-    );
-
     try {
-      if (newState) {
+      if (turningOn) {
         const video = await startScreenShareStream();
 
-        // handle native screen share end
+        updateOwnVoiceState({ sharingScreen: true });
+        playSound(SoundType.OWN_USER_STARTED_SCREENSHARE);
+
         video.onended = async () => {
           stopScreenShareStream();
           updateOwnVoiceState({ sharingScreen: false });
@@ -180,14 +175,21 @@ const useVoiceControls = ({
             // ignore
           }
         };
+
+        await trpc.voice.updateState.mutate({
+          sharingScreen: true
+        });
       } else {
         stopScreenShareStream();
-      }
+        updateOwnVoiceState({ sharingScreen: false });
+        playSound(SoundType.OWN_USER_STOPPED_SCREENSHARE);
 
-      await trpc.voice.updateState.mutate({
-        sharingScreen: newState
-      });
+        await trpc.voice.updateState.mutate({
+          sharingScreen: false
+        });
+      }
     } catch (error) {
+      stopScreenShareStream();
       updateOwnVoiceState({ sharingScreen: false });
 
       try {
@@ -196,7 +198,9 @@ const useVoiceControls = ({
         // ignore
       }
 
-      toast.error(getTrpcError(error, 'Failed to update screen share state'));
+      if (!isDisplayMediaUserCancel(error)) {
+        toast.error(getTrpcError(error, 'Failed to update screen share state'));
+      }
     } finally {
       isTogglingScreenShare.current = false;
     }

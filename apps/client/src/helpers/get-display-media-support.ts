@@ -28,4 +28,26 @@ const getSuppressLocalAudioPlaybackSupport = () => {
   return !!constraints?.suppressLocalAudioPlayback;
 };
 
-export { getRestrictOwnAudioSupport, getSuppressLocalAudioPlaybackSupport };
+const isDisplayMediaUserCancel = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+
+  const name = 'name' in error ? String(error.name) : '';
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    name === 'AbortError' ||
+    name === 'NotAllowedError' ||
+    /aborted a request/i.test(message) ||
+    /starting capture/i.test(message) ||
+    /permission denied/i.test(message) ||
+    /user denied/i.test(message) ||
+    /video was requested/i.test(message) ||
+    /invoking remote method 'desktop:display-media:cancel'/i.test(message)
+  );
+};
+
+export {
+  getRestrictOwnAudioSupport,
+  getSuppressLocalAudioPlaybackSupport,
+  isDisplayMediaUserCancel
+};

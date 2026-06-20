@@ -19,7 +19,8 @@ import { createApplicationLoopbackPcmAudioTrack } from '@/helpers/application-lo
 import { logVoice } from '@/helpers/browser-logger';
 import {
   getRestrictOwnAudioSupport,
-  getSuppressLocalAudioPlaybackSupport
+  getSuppressLocalAudioPlaybackSupport,
+  isDisplayMediaUserCancel
 } from '@/helpers/get-display-media-support';
 import { getResWidthHeight } from '@/helpers/get-res-with-height';
 import { pickScreenShareH264Codec } from '@/helpers/pick-screen-share-h264-codec';
@@ -822,7 +823,12 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
         throw new Error('No video track obtained for screen share');
       }
     } catch (error) {
-      logVoice('Error starting screen share stream', { error });
+      if (isDisplayMediaUserCancel(error)) {
+        logVoice('Screen share cancelled by user');
+      } else {
+        logVoice('Error starting screen share stream', { error });
+      }
+
       throw error;
     }
   }, [

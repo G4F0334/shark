@@ -30,19 +30,86 @@ function createDisplayMediaPickerController({ srcDir }) {
   /** @type {BrowserWindow | null} */
   let pickerWindow = null;
 
+  /** @type {BrowserWindow | null} */
+  let pickerParentWindow = null;
+
   /**
-   * sharkExcludePid — PID renderer'а основного окна Sharkord (не окна picker).
-   * hostWebContents — вкладка, вызвавшая getDisplayMedia (куда слать PCM с exe).
-   * @type {{ callback: (streams: DisplayMediaStreams) => void; audioRequested: boolean; sharkExcludePid: number | null; hostWebContents: import('electron').WebContents | null } | null}
+   * @type {{
+   *   callback: (streams: DisplayMediaStreams) => void;
+   *   audioRequested: boolean;
+   *   sharkExcludePid: number | null;
+   *   hostWebContents: import('electron').WebContents | null;
+   * } | null}
    */
   let pending = null;
 
-  function closePicker() {
+  function denyDisplayMediaCallback(callback) {
+    setImmediate(() => {
+      try {
+        callback({});
+      } catch {
+        // Electron 34+ throws when video was requested but not provided.
+        // Renderer still receives AbortError from getDisplayMedia.
+      }
+    });
+  }
+
+  function denyPendingRequest({ closeWindow = true } = {}) {
+    if (!pending) {
+      if (closeWindow) closePicker();
+      return;
+    }
+
+    const { callback } = pending;
+    pending = null;
+    stopApplicationLoopbackChild();
+
+    if (closeWindow) closePicker();
+
+    denyDisplayMediaCallback(callback);
+  }
+
+  function closePicker({ restoreFocus = true } = {}) {
+    const parent = pickerParentWindow;
+
     if (pickerWindow && !pickerWindow.isDestroyed()) {
       pickerWindow.removeAllListeners('closed');
-      pickerWindow.close();
+      pickerWindow.hide();
+      pickerWindow.destroy();
     }
+
     pickerWindow = null;
+    pickerParentWindow = null;
+
+    if (restoreFocus && parent && !parent.isDestroyed()) {
+      setImmediate(() => {
+        if (!parent.isDestroyed()) {
+          parent.show();
+          parent.focus();
+        }
+      });
+    }
+  }
+
+  /**
+   * @param {BrowserWindow} parent
+   * @param {BrowserWindow} picker
+   */
+  function centerPickerOnParent(parent, picker) {
+    try {
+      const parentBounds = parent.getBounds();
+      const pickerBounds = picker.getBounds();
+      const x = Math.round(
+        parentBounds.x + (parentBounds.width - pickerBounds.width) / 2
+      );
+      const y = Math.round(
+        parentBounds.y + (parentBounds.height - pickerBounds.height) / 2
+      );
+
+      picker.setPosition(x, y, false);
+    } catch {
+      picker.center();
+    }
   }
 
   /**
@@ -50,17 +117,25 @@ function createDisplayMediaPickerController({ srcDir }) {
    * @param {boolean} audioRequested
    */
   function openPickerUi(parent, audioRequested) {
-    closePicker();
+    closePicker({ restoreFocus: false });
+
+    pickerParentWindow =
+      parent && !parent.isDestroyed() ? parent : null;
 
     pickerWindow = new BrowserWindow({
-      parent: parent ?? undefined,
-      modal: Boolean(parent),
-      width: 680,
-      height: 560,
-      minWidth: 420,
-      minHeight: 360,
-      title: audioRequested ? 'Выбор экрана и звука' : 'Выбор экрана',
+      parent: pickerParentWindow ?? undefined,
+      modal: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      width: 720,
+      height: 600,
+      minWidth: 480,
+      minHeight: 420,
+      title: audioRequested
+        ? 'Демонстрация экрана и звука'
+        : 'Демонстрация экрана',
       autoHideMenuBar: true,
+      backgroundColor: '#252525',
       webPreferences: {
         preload: preloadPath,
         contextIsolation: true,
@@ -70,16 +145,22 @@ function createDisplayMediaPickerController({ srcDir }) {
       show: false
     });
 
-    pickerWindow.once('ready-to-show', () => pickerWindow?.show());
+    pickerWindow.once('ready-to-show', () => {
+      if (!pickerWindow || pickerWindow.isDestroyed()) return;
+
+      if (pickerParentWindow && !pickerParentWindow.isDestroyed()) {
+        centerPickerOnParent(pickerParentWindow, pickerWindow);
+      } else {
+        pickerWindow.center();
+      }
+
+      pickerWindow.show();
+      pickerWindow.focus();
+    });
 
     pickerWindow.on('closed', () => {
       pickerWindow = null;
-      if (pending) {
-        stopApplicationLoopbackChild();
-        const cb = pending.callback;
-        pending = null;
-        cb({});
-      }
+      denyPendingRequest({ closeWindow: false });
     });
 
     pickerWindow.loadFile(pickerHtmlPath);
@@ -129,7 +210,7 @@ function createDisplayMediaPickerController({ srcDir }) {
   function registerSessionHandler() {
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
       if (pending) {
-        callback({});
+        denyDisplayMediaCallback(callback);
         return;
       }
 
@@ -140,7 +221,10 @@ function createDisplayMediaPickerController({ srcDir }) {
         hostWebContents: request.frame?.hostWebContents ?? null
       };
 
-      openPickerUi(parentWindowFromRequest(request), Boolean(request.audioRequested));
+      openPickerUi(
+        parentWindowFromRequest(request),
+        Boolean(request.audioRequested)
+      );
     });
   }
 
@@ -176,8 +260,12 @@ function createDisplayMediaPickerController({ srcDir }) {
         };
       }
 
-      const { audioRequested, callback: cb, sharkExcludePid, hostWebContents } =
-        pending;
+      const {
+        callback,
+        audioRequested,
+        sharkExcludePid,
+        hostWebContents
+      } = pending;
       pending = null;
 
       const sources = await desktopCapturer.getSources({
@@ -186,15 +274,17 @@ function createDisplayMediaPickerController({ srcDir }) {
         fetchWindowIcons: false
       });
       const video = sources.find((s) => s.id === sourceId);
+
       if (!video) {
         stopApplicationLoopbackChild();
-        cb({});
         closePicker();
+        denyDisplayMediaCallback(callback);
         return { ok: false, error: 'Источник больше не доступен.' };
       }
 
       /** @type {DisplayMediaStreams} */
       const streams = { video };
+
       if (audioRequested) {
         if (process.platform === 'win32') {
           const exePath = resolveApplicationLoopbackExe(srcDir);
@@ -230,26 +320,26 @@ function createDisplayMediaPickerController({ srcDir }) {
           }
 
           setImmediate(() =>
-            console.info('[display-media] ApplicationLoopback', getApplicationLoopbackDiagnostics())
+            console.info(
+              '[display-media] ApplicationLoopback',
+              getApplicationLoopbackDiagnostics()
+            )
           );
         } else {
           streams.audio = 'loopback';
           stopApplicationLoopbackChild();
         }
-      } else stopApplicationLoopbackChild();
-      cb(streams);
+      } else {
+        stopApplicationLoopbackChild();
+      }
+
+      callback(streams);
       closePicker();
       return { ok: true };
     });
 
     ipcMain.handle('desktop:display-media:cancel', async () => {
-      stopApplicationLoopbackChild();
-      if (pending) {
-        const cb = pending.callback;
-        pending = null;
-        cb({});
-      }
-      closePicker();
+      denyPendingRequest();
       return { ok: true };
     });
     ipcMain.handle('desktop:application-loopback-stop', async () => {
