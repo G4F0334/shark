@@ -39,6 +39,11 @@ declare global {
         onData: (data: ArrayBuffer) => void,
         onEnd: () => void
       ) => () => void;
+      storage?: {
+        readAll: () => Promise<Record<string, string>>;
+        setItem: (key: string, value: string) => Promise<{ ok: boolean }>;
+        removeItem: (key: string) => Promise<{ ok: boolean }>;
+      };
     };
   }
 

@@ -17,11 +17,13 @@ import { ThemeProvider } from './components/theme-provider/index.tsx';
 import { exposePluginStore } from './features/server/plugins/plugin-store.ts';
 import { store } from './features/store.ts';
 import { exposeLibs, exposeReact } from './helpers/exposes.ts';
+import { installElectronLocalStorageBridge } from './helpers/electron-persist-storage.ts';
 import { LocalStorageKey } from './helpers/storage.ts';
 import './index.css';
 import './features/hotkeys/hotkeys.ts';
 import { startHotkeyListener } from './features/hotkeys/listener.ts';
 
+await installElectronLocalStorageBridge();
 startHotkeyListener();
 
 exposeReact();

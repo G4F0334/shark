@@ -1,94 +1,103 @@
-import { BrowserWindow, desktopCapturer, Tray, Menu, nativeImage, ipcMain, session, app } from 'electron';
-import { RunWebCode, GetMainWindow } from './main.js';
+import { Tray, Menu, nativeImage, ipcMain, app } from 'electron';
 import path from 'node:path';
-
-let tray;
-
-import { fileURLToPath } from "url";
-import { appendFileSync } from 'node:fs';
+import { focusMainWindow, GetMainWindow } from './main.js';
+import { getIconsDir } from './paths.js';
 
 const ImageStatus = {
-    'inactive': 'prog.png',
-    'active': 'off.png',
-    'speaking': 'on.png',
-    'micmuted': 'mic.png',
-    'soundmute': 'headset.png'
-}
+  inactive: 'prog.png',
+  active: 'off.png',
+  speaking: 'on.png',
+  micmuted: 'mic.png',
+  soundmute: 'headset.png'
+};
 
+let tray;
 let forceQuit = false;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(path.dirname(__filename));
-
 function getImageStatus(state) {
-    const iconPath = path.join(__dirname, "icons", ImageStatus[state]);
-    return nativeImage.createFromPath(iconPath);
+  const iconPath = path.join(getIconsDir(), ImageStatus[state] ?? ImageStatus.inactive);
+  const icon = nativeImage.createFromPath(iconPath);
+
+  if (icon.isEmpty()) {
+    console.error('Tray icon not found or empty:', iconPath);
+  }
+
+  return icon;
 }
 
 function showFromTray() {
-    const mainWindow = GetMainWindow();
+  focusMainWindow();
+}
 
-    if (!appendFileSync) return;
+function quitApp() {
+  forceQuit = true;
 
-    if (mainWindow.isMinimized()) {
-        mainWindow.restore();
-    }
+  const mainWindow = GetMainWindow();
 
-    mainWindow.show();
-    mainWindow.focus();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.destroy();
+  }
+
+  app.quit();
 }
 
 function createTrayIcon() {
-    const icon = getImageStatus('inactive');
+  const icon = getImageStatus('inactive');
 
-    console.log(icon.isEmpty());
+  if (icon.isEmpty()) {
+    console.error('Skipping tray creation: icon is empty');
+    return;
+  }
 
-    tray = new Tray(icon);
+  tray = new Tray(icon);
+  tray.setToolTip('Sharkord');
 
-    tray.setToolTip("My Electron App");
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Открыть', click: () => showFromTray() },
+    {
+      label: 'Выход',
+      click: () => {
+        quitApp();
+      }
+    }
+  ]);
 
-    const contextMenu = Menu.buildFromTemplate([
-        { label: "Открыть", click: () => showFromTray() },
-        {
-            label: "Выход", click: () => {
-                forceQuit = true;
-                app.quit();
-            }
-        }
-    ]);
+  tray.on('double-click', () => {
+    showFromTray();
+  });
 
-    tray.on("double-click", () => {
-        showFromTray();
-    });
-
-    tray.setContextMenu(contextMenu);
+  tray.setContextMenu(contextMenu);
 }
 
 app.whenReady().then(() => {
-    createTrayIcon();
+  createTrayIcon();
 });
 
 export function CloseState(mainWindow) {
-    mainWindow.on("close", (event) => {
-        if (!forceQuit) {
-            event.preventDefault();
-            mainWindow.hide();
-        }
-    });
+  mainWindow.on('close', (event) => {
+    if (!forceQuit) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
 }
+
+export { quitApp };
 
 let status = 'inactive';
 let oldStatus = 'inactive';
 
-ipcMain.handle('desktop:voice-activity', async (self, state) => {
-    status = state;
-    // console.log("Voice activity state:", state);
+ipcMain.handle('desktop:voice-activity', async (_self, state) => {
+  status = state;
 });
 
 setInterval(() => {
-    if (status !== oldStatus) {
-        oldStatus = status;
-        const icon = getImageStatus(status);
-        tray.setImage(icon);
-    }
-}, 10)
+  if (!tray || status === oldStatus) return;
+
+  oldStatus = status;
+  const icon = getImageStatus(status);
+
+  if (!icon.isEmpty()) {
+    tray.setImage(icon);
+  }
+}, 100);

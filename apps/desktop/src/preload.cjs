@@ -47,5 +47,10 @@ contextBridge.exposeInMainWorld('desktop', {
     submit: (payload) =>
       ipcRenderer.invoke('desktop:display-media:submit', payload),
     cancel: () => ipcRenderer.invoke('desktop:display-media:cancel')
+  },
+  storage: {
+    readAll: () => ipcRenderer.invoke('desktop:storage-read-all'),
+    setItem: (key, value) => ipcRenderer.invoke('desktop:storage-set', key, value),
+    removeItem: (key) => ipcRenderer.invoke('desktop:storage-remove', key)
   }
 });

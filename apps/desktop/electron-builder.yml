@@ -16,6 +16,8 @@ asar: true
 npmRebuild: false
 
 extraResources:
+  - from: icons
+    to: icons
   - from: lib/ApplicationLoopback.exe
     to: lib/ApplicationLoopback.exe
 

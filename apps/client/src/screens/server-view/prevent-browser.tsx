@@ -4,9 +4,10 @@ import { memo } from 'react';
 
 const PreventBrowser = memo(() => {
   const currentVoiceChannelId = useCurrentVoiceChannelId();
+  const isElectron = window.desktop?.isElectron === true;
 
-  // this will prevent the user from closing the browser tab/window when connected to a voice channel
-  usePreventExit(!!currentVoiceChannelId);
+  // Desktop hides to tray on close and has an explicit tray Quit action.
+  usePreventExit(!!currentVoiceChannelId && !isElectron);
 
   return null;
 });

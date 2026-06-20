@@ -16,7 +16,8 @@ function createMainWindow({ srcDir }) {
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      partition: 'persist:sharkord'
     },
     show: false
   });
