@@ -10,11 +10,46 @@ import {
 } from './application-loopback.js';
 import { getSharkordSession } from './session-config.js';
 
-/**
- * После выбора источника демонстрации — куда брать дорожку SCREEN_AUDIO.
- * @type {Map<number, 'application-loopback'|'chromium-loopback'>}
- */
+/** @type {Map<number, 'application-loopback'|'chromium-loopback'>} */
 const displayMediaAudioRouteByWebContentsId = new Map();
+
+/** @type {{ webContentsId: number; route: 'application-loopback' | 'chromium-loopback'; at: number } | null} */
+let lastDisplayMediaAudioRoute = null;
+
+/**
+ * @param {number} webContentsId
+ * @param {'application-loopback' | 'chromium-loopback'} route
+ */
+function setDisplayMediaAudioRoute(webContentsId, route) {
+  displayMediaAudioRouteByWebContentsId.set(webContentsId, route);
+  lastDisplayMediaAudioRoute = { webContentsId, route, at: Date.now() };
+}
+
+/**
+ * @param {number} senderId
+ * @returns {'application-loopback' | 'chromium-loopback' | 'none'}
+ */
+function consumeDisplayMediaAudioRoute(senderId) {
+  const direct = displayMediaAudioRouteByWebContentsId.get(senderId);
+  if (direct) {
+    displayMediaAudioRouteByWebContentsId.delete(senderId);
+    return direct;
+  }
+
+  const recent = lastDisplayMediaAudioRoute;
+  if (recent && Date.now() - recent.at < 60_000) {
+    displayMediaAudioRouteByWebContentsId.delete(recent.webContentsId);
+    lastDisplayMediaAudioRoute = null;
+    console.info('[display-media] audio route consumed via fallback', {
+      senderId,
+      storedId: recent.webContentsId,
+      route: recent.route
+    });
+    return recent.route;
+  }
+
+  return 'none';
+}
 
 /**
  * @typedef {import('electron').DisplayMediaRequestHandlerStreams} DisplayMediaStreams
@@ -184,6 +219,70 @@ function createDisplayMediaPickerController({ srcDir }) {
     return BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null;
   }
 
+  /**
+   * @param {import('electron').WebContents | null | undefined} stored
+   * @param {BrowserWindow | null | undefined} parentWindow
+   * @returns {import('electron').WebContents | null}
+   */
+  function resolveHostWebContents(stored, parentWindow) {
+    if (
+      stored &&
+      typeof stored.isDestroyed === 'function' &&
+      !stored.isDestroyed()
+    ) {
+      return stored;
+    }
+
+    const parent =
+      parentWindow && !parentWindow.isDestroyed() ? parentWindow : null;
+    const parentWc = parent?.webContents;
+    if (
+      parentWc &&
+      typeof parentWc.isDestroyed === 'function' &&
+      !parentWc.isDestroyed()
+    ) {
+      return parentWc;
+    }
+
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused && !focused.isDestroyed()) {
+      const focusedWc = focused.webContents;
+      if (
+        focusedWc &&
+        typeof focusedWc.isDestroyed === 'function' &&
+        !focusedWc.isDestroyed()
+      ) {
+        return focusedWc;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * @param {import('electron').WebContents | null | undefined} hostWc
+   * @param {number | null | undefined} cachedPid
+   * @returns {number | null}
+   */
+  function resolveSharkExcludePid(hostWc, cachedPid) {
+    if (typeof cachedPid === 'number' && cachedPid > 0) return cachedPid;
+
+    if (
+      hostWc &&
+      typeof hostWc.isDestroyed === 'function' &&
+      !hostWc.isDestroyed()
+    ) {
+      try {
+        const pid = hostWc.getOSProcessId();
+        if (typeof pid === 'number' && pid > 0) return pid;
+      } catch {
+        // ignore
+      }
+    }
+
+    return null;
+  }
+
   /** Renderer PID, который запросил getDisplayMedia (исключить его звук при screen + loopback). */
   function osPidExcludeSharkAudio(req) {
     try {
@@ -288,36 +387,43 @@ function createDisplayMediaPickerController({ srcDir }) {
 
       if (audioRequested) {
         if (process.platform === 'win32') {
-          const exePath = resolveApplicationLoopbackExe(srcDir);
-          const albChild = startApplicationLoopbackForDesktopShare({
-            exePath,
-            isScreen: video.id.startsWith('screen:'),
-            windowSourceId: video.id,
-            sharkExcludePid: sharkExcludePid ?? 0
+          const hostWc = resolveHostWebContents(
+            hostWebContents,
+            pickerParentWindow
+          );
+          const hostOk = hostWc != null;
+          const isScreen = video.id.startsWith('screen:');
+          const excludePid = resolveSharkExcludePid(hostWc, sharkExcludePid);
+
+          console.info('[display-media] audio submit', {
+            hostOk,
+            hostWebContentsId: hostWc?.id ?? null,
+            storedHostWebContentsId: hostWebContents?.id ?? null,
+            isScreen,
+            excludePid
           });
 
-          const hostOk =
-            hostWebContents != null &&
-            typeof hostWebContents.isDestroyed === 'function' &&
-            !hostWebContents.isDestroyed();
+          if (hostOk) {
+            const exePath = resolveApplicationLoopbackExe(srcDir);
+            const albChild = startApplicationLoopbackForDesktopShare({
+              exePath,
+              isScreen,
+              windowSourceId: video.id,
+              sharkExcludePid: excludePid ?? 0
+            });
 
-          if (albChild != null && hostOk) {
-            attachApplicationLoopbackStdoutPcm(hostWebContents);
-            displayMediaAudioRouteByWebContentsId.set(
-              hostWebContents.id,
-              'application-loopback'
-            );
+            if (albChild != null) {
+              attachApplicationLoopbackStdoutPcm(hostWc);
+              setDisplayMediaAudioRoute(hostWc.id, 'application-loopback');
+            } else {
+              streams.audio = 'loopback';
+              setDisplayMediaAudioRoute(hostWc.id, 'chromium-loopback');
+            }
           } else {
-            if (albChild != null && !hostOk) {
-              stopApplicationLoopbackChild();
-            }
             streams.audio = 'loopback';
-            if (hostOk) {
-              displayMediaAudioRouteByWebContentsId.set(
-                hostWebContents.id,
-                'chromium-loopback'
-              );
-            }
+            console.warn(
+              '[display-media] host webContents unavailable — ApplicationLoopback skipped, chromium loopback only'
+            );
           }
 
           setImmediate(() =>
@@ -352,9 +458,11 @@ function createDisplayMediaPickerController({ srcDir }) {
       diagnostics: getApplicationLoopbackDiagnostics()
     }));
     ipcMain.handle('desktop:consume-display-media-audio-route', (event) => {
-      const key = event.sender.id;
-      const audioRoute = displayMediaAudioRouteByWebContentsId.get(key) ?? 'none';
-      displayMediaAudioRouteByWebContentsId.delete(key);
+      const audioRoute = consumeDisplayMediaAudioRoute(event.sender.id);
+      console.info('[display-media] consume audio route', {
+        senderId: event.sender.id,
+        audioRoute
+      });
       return { audioRoute };
     });
     ipcMain.handle('desktop:application-loopback-pcm-ready', (event) =>
