@@ -9,6 +9,7 @@ import { AlertTriangle, Loader2, Monitor, MonitorOff, PhoneOff, Video, VideoOff,
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExternalAudioStreams } from '../channel-view/voice/external-audio-streams';
+import { ScreenShareAudioStreams } from '../channel-view/voice/screen-share-audio-streams';
 import { VoiceAudioStreams } from '../channel-view/voice/voice-audio-streams';
 import { StatsPopover } from './stats-popover';
 
@@ -70,6 +71,7 @@ const VoiceControl = memo(() => {
   return (
     <>
       <VoiceAudioStreams channelId={voiceChannelId} />
+      <ScreenShareAudioStreams channelId={voiceChannelId} />
       <ExternalAudioStreams channelId={voiceChannelId} />
       <div className="bg-secondary/30 border-t border-border">
         <StatsPopover>

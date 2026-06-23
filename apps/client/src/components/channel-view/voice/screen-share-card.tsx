@@ -114,7 +114,6 @@ const ScreenShareCard = memo(
 
     const {
       screenShareRef,
-      screenShareAudioRef,
       hasScreenShareStream,
       hasScreenShareAudioStream
     } = useVoiceRefs(userId);
@@ -238,13 +237,6 @@ const ScreenShareCard = memo(
             transform: `scale(${zoom}) translate(${position.x / zoom}px, ${position.y / zoom}px)`,
             transition: isDragging ? 'none' : 'transform 0.1s ease-out'
           }}
-        />
-
-        <audio
-          ref={screenShareAudioRef}
-          className="hidden"
-          autoPlay
-          playsInline
         />
 
         <div className="absolute bottom-0 left-0 right-0 p-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
