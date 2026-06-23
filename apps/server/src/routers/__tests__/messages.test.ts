@@ -887,6 +887,13 @@ describe('messages router', () => {
     expect(firstPage.messages.length).toBe(5);
     expect(firstPage.nextCursor).toBeDefined();
     expect(firstPage.nextCursor).not.toBeNull();
+    expect(firstPage.messages.map((message) => message.content)).toEqual([
+      'Message 10',
+      'Message 9',
+      'Message 8',
+      'Message 7',
+      'Message 6'
+    ]);
 
     // get second page
     const secondPage = await caller.messages.get({
@@ -895,7 +902,13 @@ describe('messages router', () => {
       limit: 5
     });
 
-    expect(secondPage.messages.length).toBeGreaterThan(0);
+    expect(secondPage.messages.map((message) => message.content)).toEqual([
+      'Message 5',
+      'Message 4',
+      'Message 3',
+      'Message 2',
+      'Message 1'
+    ]);
 
     // ensure no overlap between pages
     const firstPageIds = firstPage.messages.map((m) => m.id);
@@ -1606,6 +1619,13 @@ describe('messages router', () => {
 
     expect(firstPage.messages.length).toBe(5);
     expect(firstPage.nextCursor).not.toBeNull();
+    expect(firstPage.messages.map((message) => message.content)).toEqual([
+      'Thread reply 1',
+      'Thread reply 2',
+      'Thread reply 3',
+      'Thread reply 4',
+      'Thread reply 5'
+    ]);
 
     const secondPage = await caller.messages.getThread({
       parentMessageId: parentId,
@@ -1613,7 +1633,13 @@ describe('messages router', () => {
       limit: 5
     });
 
-    expect(secondPage.messages.length).toBeGreaterThan(0);
+    expect(secondPage.messages.map((message) => message.content)).toEqual([
+      'Thread reply 6',
+      'Thread reply 7',
+      'Thread reply 8',
+      'Thread reply 9',
+      'Thread reply 10'
+    ]);
 
     // no overlap between pages
     const firstPageIds = firstPage.messages.map((m) => m.id);
@@ -2015,6 +2041,78 @@ describe('messages router', () => {
         limit: 50
       })
     ).rejects.toThrow('Insufficient channel permissions');
+  });
+
+  describe('private channel VIEW_CHANNEL enforcement on mutations', () => {
+    const setupPrivateChannelWithoutView = async () => {
+      const { caller: caller1 } = await initTest(1);
+      const { caller: caller2 } = await initTest(2);
+
+      await caller1.channels.update({
+        channelId: 1,
+        name: 'General',
+        topic: 'General text channel',
+        private: true
+      });
+
+      await caller1.channels.updatePermissions({
+        channelId: 1,
+        roleId: 2,
+        permissions: [ChannelPermission.SEND_MESSAGES]
+      });
+
+      const messageId = await caller1.messages.send({
+        channelId: 1,
+        content: 'Private channel message',
+        files: []
+      });
+
+      return { caller1, caller2, messageId };
+    };
+
+    const grantRole2Permission = async (permission: Permission) => {
+      await tdb.insert(rolePermissions).values({
+        roleId: 2,
+        permission,
+        createdAt: Date.now()
+      });
+    };
+
+    test('should throw when editing without VIEW_CHANNEL on private non-DM channel', async () => {
+      const { caller2, messageId } = await setupPrivateChannelWithoutView();
+      await grantRole2Permission(Permission.MANAGE_MESSAGES);
+
+      await expect(
+        caller2.messages.edit({ messageId, content: 'Hacked' })
+      ).rejects.toThrow('Insufficient channel permissions');
+    });
+
+    test('should throw when deleting without VIEW_CHANNEL on private non-DM channel', async () => {
+      const { caller2, messageId } = await setupPrivateChannelWithoutView();
+      await grantRole2Permission(Permission.MANAGE_MESSAGES);
+
+      await expect(
+        caller2.messages.delete({ messageId })
+      ).rejects.toThrow('Insufficient channel permissions');
+    });
+
+    test('should throw when pinning without VIEW_CHANNEL on private non-DM channel', async () => {
+      const { caller2, messageId } = await setupPrivateChannelWithoutView();
+      await grantRole2Permission(Permission.PIN_MESSAGES);
+
+      await expect(
+        caller2.messages.togglePin({ messageId })
+      ).rejects.toThrow('Insufficient channel permissions');
+    });
+
+    test('should throw when reacting without VIEW_CHANNEL on private non-DM channel', async () => {
+      const { caller2, messageId } = await setupPrivateChannelWithoutView();
+      await grantRole2Permission(Permission.REACT_TO_MESSAGES);
+
+      await expect(
+        caller2.messages.toggleReaction({ messageId, emoji: '👍' })
+      ).rejects.toThrow('Insufficient channel permissions');
+    });
   });
 
   test('should reject file attachments in DMs when file uploads are globally disabled', async () => {

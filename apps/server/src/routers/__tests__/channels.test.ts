@@ -1004,6 +1004,28 @@ describe('channels router', () => {
     );
   });
 
+  test('should throw when marking private channel as read without VIEW_CHANNEL', async () => {
+    const { caller: caller1 } = await initTest(1);
+    const { caller: caller2 } = await initTest(2);
+
+    await caller1.channels.update({
+      channelId: 1,
+      name: 'General',
+      topic: 'General text channel',
+      private: true
+    });
+
+    await caller1.channels.updatePermissions({
+      channelId: 1,
+      roleId: 2,
+      permissions: [ChannelPermission.SEND_MESSAGES]
+    });
+
+    await expect(caller2.channels.markAsRead({ channelId: 1 })).rejects.toThrow(
+      'Insufficient channel permissions'
+    );
+  });
+
   test('should throw when updating permissions for a DM channel', async () => {
     const { caller } = await initTest();
 

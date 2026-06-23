@@ -40,11 +40,6 @@ function consumeDisplayMediaAudioRoute(senderId) {
   if (recent && Date.now() - recent.at < 60_000) {
     displayMediaAudioRouteByWebContentsId.delete(recent.webContentsId);
     lastDisplayMediaAudioRoute = null;
-    console.info('[display-media] audio route consumed via fallback', {
-      senderId,
-      storedId: recent.webContentsId,
-      route: recent.route
-    });
     return recent.route;
   }
 
@@ -159,7 +154,6 @@ function createDisplayMediaPickerController({ srcDir }) {
       parent && !parent.isDestroyed() ? parent : null;
 
     pickerWindow = new BrowserWindow({
-      parent: pickerParentWindow ?? undefined,
       modal: false,
       alwaysOnTop: true,
       skipTaskbar: true,
@@ -395,20 +389,13 @@ function createDisplayMediaPickerController({ srcDir }) {
           const isScreen = video.id.startsWith('screen:');
           const excludePid = resolveSharkExcludePid(hostWc, sharkExcludePid);
 
-          console.info('[display-media] audio submit', {
-            hostOk,
-            hostWebContentsId: hostWc?.id ?? null,
-            storedHostWebContentsId: hostWebContents?.id ?? null,
-            isScreen,
-            excludePid
-          });
-
           if (hostOk) {
             const exePath = resolveApplicationLoopbackExe(srcDir);
             const albChild = startApplicationLoopbackForDesktopShare({
               exePath,
               isScreen,
               windowSourceId: video.id,
+              windowSourceName: video.name,
               sharkExcludePid: excludePid ?? 0
             });
 
@@ -459,10 +446,6 @@ function createDisplayMediaPickerController({ srcDir }) {
     }));
     ipcMain.handle('desktop:consume-display-media-audio-route', (event) => {
       const audioRoute = consumeDisplayMediaAudioRoute(event.sender.id);
-      console.info('[display-media] consume audio route', {
-        senderId: event.sender.id,
-        audioRoute
-      });
       return { audioRoute };
     });
     ipcMain.handle('desktop:application-loopback-pcm-ready', (event) =>

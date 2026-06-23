@@ -21,6 +21,15 @@ export type TExternalStreamTracks = {
   video?: boolean;
 };
 
+export type TStreamQualityLayer = {
+  spatialLayer: number;
+  label: string;
+};
+
+export type TStreamQuality =
+  | { mode: 'auto' }
+  | { mode: 'layer'; spatialLayer: number };
+
 export type TRemoteProducerIds = {
   remoteVideoIds: number[];
   remoteAudioIds: number[];
@@ -45,6 +54,7 @@ export type TPublicServerSettings = Pick<
   | 'storageSpaceQuotaByUser'
   | 'storageOverflowAction'
   | 'enablePlugins'
+  | 'webRtcSimulcastEnabled'
   | 'enableSearch'
   | 'showWelcomeDialog'
   | 'storageSignedUrlsEnabled'
@@ -60,7 +70,16 @@ export type TGenericFunction = {
   (...args: any[]): any;
 };
 
-export type TMessageMetadata = {
+export type TMessageMediaMetadata = {
+  kind: 'media';
+  url: string;
+  title?: string;
+  description?: string;
+  mediaType: 'image' | 'video' | 'audio';
+};
+
+export type TMessageOpenGraphMetadata = {
+  kind: 'open_graph';
   url: string;
   title?: string;
   siteName?: string;
@@ -70,6 +89,10 @@ export type TMessageMetadata = {
   videos?: string[];
   favicons?: string[];
 };
+
+export type TMessageMetadata =
+  | TMessageMediaMetadata
+  | TMessageOpenGraphMetadata;
 
 export type WithOptional<T, K extends keyof T> = Omit<T, K> &
   Partial<Pick<T, K>>;

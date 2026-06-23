@@ -8,7 +8,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sharkord</title>
   <script>
-    if ('serviceWorker' in navigator) {
+    if (
+      'serviceWorker' in navigator &&
+      !navigator.userAgent.includes('Electron')
+    ) {
       navigator.serviceWorker.register('/sw.js');
     }
   </script>

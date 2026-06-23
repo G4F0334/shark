@@ -5,6 +5,7 @@ import { applyWebRtcGpuEncodingPreferences } from './apply-webrtc-gpu-switches.j
 import { createDisplayMediaPickerController } from './display-media-picker.js';
 import { createMainWindow } from './create-main-window.js';
 import { installKnownChromiumStderrIgnore } from './ignore-known-chromium-stderr.js';
+import { installDesktopLogging } from './logger.js';
 import './hotkeys.js';
 import { registerDesktopStorageIpc } from './storage.js';
 import { CloseState } from './trayicon.js';
@@ -41,6 +42,7 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    installDesktopLogging();
     registerDesktopStorageIpc();
     displayPicker.registerIpc();
     displayPicker.registerSessionHandler();

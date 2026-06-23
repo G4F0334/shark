@@ -1,6 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
 
@@ -217,96 +216,155 @@ export function stopApplicationLoopbackChild() {
   }
 }
 
-/** @returns {bigint | null} */
+/** @returns {bigint | null} Electron `window:XX:YY` — XX is handle, YY is process flag (0/1). */
 export function hwndU64FromWindowSourceId(sourceId) {
   const m = /^window:(\d+):(\d+)$/.exec(sourceId ?? '');
   if (!m) return null;
-  const low = BigInt(m[1]);
-  const high = BigInt(m[2]);
-  return (high << 32n) | low;
+  return BigInt(m[1]);
 }
 
 function hwndCandidates(sourceId) {
-  const u = hwndU64FromWindowSourceId(sourceId);
-  if (u === null) return [];
+  const m = /^window:(\d+):(\d+)$/.exec(sourceId ?? '');
+  if (!m) return [];
 
-  const low = Number(u & 0xffffffffn);
-  const high = Number(u >> 32n);
+  const xx = Number(m[1]);
+  const yy = Number(m[2]);
+  /** @type {number[]} */
+  const handles = [];
 
-  /** @param {number} hi @param {number} lo */
-  const pack = (hi, lo) => (BigInt(hi >>> 0) << 32n) | BigInt(lo >>> 0);
+  if (Number.isFinite(xx) && xx > 0) handles.push(xx);
 
-  const uniq = [...new Set([u, pack(low, high), pack(high, low), BigInt(low), BigInt(high)])];
-  return uniq.filter((x) => x !== 0n);
+  // Older/alternate encodings — YY sometimes carried extra handle bits.
+  if (yy > 1 && Number.isFinite(yy)) {
+    const packed = Number((BigInt(yy) << 32n) | BigInt(xx >>> 0));
+    if (packed > 0) handles.push(packed);
+  }
+
+  return [...new Set(handles.filter((h) => h > 0))];
 }
 
-/** @param {bigint} hwndU64 */
-function pidFromHwndUnchecked(hwndU64) {
-  const hDec = hwndU64.toString(10);
-  if (!/^[0-9]+$/.test(hDec)) return null;
-
-  const dir = mkdtempSync(path.join(tmpdir(), 'shk-alb-'));
-  const psPath = path.join(dir, 'gwp.ps1');
-  writeFileSync(
-    psPath,
-    `$ErrorActionPreference='Stop'\nAdd-Type @"
+const PS_WIN32 = String.raw`if (-not ('ShkWin' -as [type])) {
+Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class Wx {
- [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint lp);
- public static uint P(string dec) {
-  ulong u = UInt64.Parse(dec);
-  unchecked { var ip = new IntPtr((long)u); uint p = 0; Wx.GetWindowThreadProcessId(ip, out p); return p; }
- }
+using System.Text;
+public static class ShkWin {
+  [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint p);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc cb, IntPtr l);
+  [DllImport("user32.dll")] static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
+  delegate bool EnumWindowsProc(IntPtr h, IntPtr l);
+  public static uint PidFromHwnd(long hwnd) {
+    if (hwnd <= 0) return 0;
+    var ip = new IntPtr(hwnd);
+    if (!IsWindow(ip)) return 0;
+    uint p = 0;
+    GetWindowThreadProcessId(ip, out p);
+    return p;
+  }
+  public static uint PidFromTitle(string title) {
+    if (string.IsNullOrWhiteSpace(title)) return 0;
+    uint found = 0;
+    EnumWindows((h, l) => {
+      var sb = new StringBuilder(512);
+      GetWindowText(h, sb, 512);
+      if (sb.ToString() == title) {
+        GetWindowThreadProcessId(h, out found);
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
 }
-"@
-[Wx]::P('${hDec}')
-`,
-    'utf8'
-  );
+'@
+}`;
 
-  try {
-    const outBuf = execFileSync('powershell.exe', ['-NoProfile', '-STA', '-File', psPath], {
+/** @param {string} tail */
+function runWin32Ps(tail) {
+  const outBuf = execFileSync(
+    'powershell.exe',
+    ['-NoProfile', '-STA', '-NoLogo', '-Command', `${PS_WIN32}\n${tail}`],
+    {
       encoding: 'utf8',
       windowsHide: true,
-      timeout: 8000
-    });
-
-    const line = String(outBuf).trim().split(/\s+/)[0];
-    const n = Number.parseInt(line ?? '', 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  } catch {
-    return null;
-  } finally {
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /**/
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024
     }
+  );
+
+  const line = String(outBuf).trim().split(/\s+/)[0];
+  const n = Number.parseInt(line ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** @param {number} hwnd */
+function pidFromHwndUnchecked(hwnd) {
+  if (!Number.isFinite(hwnd) || hwnd <= 0) return null;
+
+  try {
+    return runWin32Ps(`[ShkWin]::PidFromHwnd(${hwnd})`);
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} PidFromHwnd failed hwnd=${hwnd}`, error);
+    return null;
   }
 }
 
-/** PID процесса окна для `window:<low>:<high>` (перебираем возможные HWND). */
-export function pidFromDesktopWindowSourceId(sourceId) {
+/** @param {string} title */
+function pidFromWindowTitle(title) {
+  if (!title) return null;
+
+  const escaped = title.replace(/'/g, "''");
+
+  try {
+    return runWin32Ps(`[ShkWin]::PidFromTitle('${escaped}')`);
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} PidFromTitle failed title=${title}`, error);
+    return null;
+  }
+}
+
+/**
+ * PID процесса окна для `window:<handle>:<flag>`.
+ * @param {string | undefined | null} sourceId
+ * @param {string | undefined | null} [windowTitle]
+ * @returns {number | null}
+ */
+export function pidFromDesktopWindowSourceId(sourceId, windowTitle) {
   if (process.platform !== 'win32') return null;
 
-  const cands = hwndCandidates(sourceId);
-  for (const h of cands) {
-    const p = pidFromHwndUnchecked(h);
-    if (p !== null && p > 0) return p;
+  for (const hwnd of hwndCandidates(sourceId ?? '')) {
+    const p = pidFromHwndUnchecked(hwnd);
+    if (p !== null && p > 0) {
+      console.info(`${LOG_PREFIX} window pid via hwnd`, { sourceId, hwnd, pid: p });
+      return p;
+    }
   }
 
+  if (windowTitle) {
+    const p = pidFromWindowTitle(windowTitle);
+    if (p !== null && p > 0) {
+      console.info(`${LOG_PREFIX} window pid via title`, {
+        sourceId,
+        windowTitle,
+        pid: p
+      });
+      return p;
+    }
+  }
+
+  console.warn(`${LOG_PREFIX} window pid unresolved`, { sourceId, windowTitle });
   return null;
 }
 
 /** @returns {readonly string[]} */
 function buildArgv(opts) {
-  const { isScreen, windowSourceId, sharkExcludePid } = opts;
+  const { isScreen, windowSourceId, windowSourceName, sharkExcludePid } = opts;
   if (isScreen) {
     if (!Number.isFinite(sharkExcludePid) || sharkExcludePid < 1) return [];
     return ['-x', String(sharkExcludePid)];
   }
-  const wpid = pidFromDesktopWindowSourceId(windowSourceId);
+  const wpid = pidFromDesktopWindowSourceId(windowSourceId, windowSourceName);
   if (!wpid) return [];
   return [String(wpid)];
 }
@@ -329,7 +387,7 @@ export function startApplicationLoopbackForDesktopShare(opts) {
     return null;
   }
 
-  const { exePath, isScreen, windowSourceId, sharkExcludePid } = opts;
+  const { exePath, isScreen, windowSourceId, windowSourceName, sharkExcludePid } = opts;
   diag.exePath = exePath;
   diag.exeExists = existsSync(exePath);
   diag.lastExitCode = null;
@@ -346,14 +404,19 @@ export function startApplicationLoopbackForDesktopShare(opts) {
     return null;
   }
 
-  const argv = buildArgv({ isScreen, windowSourceId, sharkExcludePid });
+  const argv = buildArgv({
+    isScreen,
+    windowSourceId,
+    windowSourceName,
+    sharkExcludePid
+  });
   diag.lastArgv = [exePath, ...argv];
 
   if (argv.length === 0) {
     diag.lastIssue = isScreen ? 'invalid_shark_exclude_pid' : 'window_pid_unresolved';
     diag.lastSpawnUnixMs = null;
     console.warn(
-      `${LOG_PREFIX} helper не запущен (${diag.lastIssue}) isScreen=${isScreen} sharkExcludePid=${sharkExcludePid} sourceId=${windowSourceId}; звук — через стандартный Chromium loopback`
+      `${LOG_PREFIX} helper не запущен (${diag.lastIssue}) isScreen=${isScreen} sharkExcludePid=${sharkExcludePid} sourceId=${windowSourceId} sourceName=${windowSourceName ?? ''}; звук — через стандартный Chromium loopback`
     );
     return null;
   }

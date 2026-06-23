@@ -2,6 +2,8 @@ import { resetApp } from '@/features/app/actions';
 import { resetDialogs } from '@/features/dialogs/actions';
 import { resetServerScreens } from '@/features/server-screens/actions';
 import { connect, onReconnectSuccess, resetServerState, restoreVoiceAfterReconnect, setDisconnectInfo, setServerReconnecting, softDisconnectFromServer, unsubscribeServerEvents } from '@/features/server/actions';
+import { playSound } from '@/features/server/sounds/actions';
+import { SoundType } from '@/features/server/types';
 import { getHostFromServer } from '@/helpers/get-file-url';
 import { getSessionStorageItem, LocalStorageKey, removeLocalStorageItem, removeSessionStorageItem, SessionStorageKey } from '@/helpers/storage';
 import { DisconnectCode, type AppRouter, type TConnectionParams } from '@sharkord/shared';
@@ -152,6 +154,7 @@ const startGracePeriod = (cause: CloseEvent) => {
   console.log('Starting reconnect grace period');
   gracePeriodStartedAt = Date.now();
   setServerReconnecting(true);
+  playSound(SoundType.SERVER_DISCONNECTED);
   unsubscribeServerEvents();
 
   fullDisconnectTimer = setTimeout(() => {
