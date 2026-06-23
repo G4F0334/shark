@@ -24,10 +24,10 @@ contextBridge.exposeInMainWorld('desktop', {
         : payload
           ? Buffer.from(payload)
           : null;
-      if (!buf) return;
-      onData(
-        buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
-      );
+      if (!buf || buf.byteLength === 0) return;
+      const copy = new Uint8Array(buf.byteLength);
+      copy.set(buf);
+      onData(copy.buffer);
     };
     const onPcmEnd = () => {
       onEnd();

@@ -176,7 +176,20 @@ export function detachApplicationLoopbackStdoutPcm(sendEnd = true) {
  * @returns {{ ok: boolean }}
  */
 export function markApplicationLoopbackPcmConsumerReady(wc) {
-  if (!pcmRouteWebContents || pcmRouteWebContents.id !== wc.id) return { ok: false };
+  if (!wc || wc.isDestroyed()) return { ok: false };
+
+  if (
+    pcmRouteWebContents &&
+    !pcmRouteWebContents.isDestroyed() &&
+    pcmRouteWebContents.id !== wc.id
+  ) {
+    console.warn(`${LOG_PREFIX} pcm route rebinding`, {
+      from: pcmRouteWebContents.id,
+      to: wc.id
+    });
+  }
+
+  pcmRouteWebContents = wc;
   pcmConsumerReady = true;
   flushPcmBacklog();
   return { ok: true };

@@ -216,9 +216,10 @@ function createDisplayMediaPickerController({ srcDir }) {
   /**
    * @param {import('electron').WebContents | null | undefined} stored
    * @param {BrowserWindow | null | undefined} parentWindow
+   * @param {BrowserWindow | null | undefined} [pickerWindow]
    * @returns {import('electron').WebContents | null}
    */
-  function resolveHostWebContents(stored, parentWindow) {
+  function resolveHostWebContents(stored, parentWindow, pickerWindow) {
     if (
       stored &&
       typeof stored.isDestroyed === 'function' &&
@@ -238,8 +239,11 @@ function createDisplayMediaPickerController({ srcDir }) {
       return parentWc;
     }
 
+    const isPickerWindow = (win) =>
+      pickerWindow != null && !pickerWindow.isDestroyed() && win === pickerWindow;
+
     const focused = BrowserWindow.getFocusedWindow();
-    if (focused && !focused.isDestroyed()) {
+    if (focused && !focused.isDestroyed() && !isPickerWindow(focused)) {
       const focusedWc = focused.webContents;
       if (
         focusedWc &&
@@ -250,7 +254,39 @@ function createDisplayMediaPickerController({ srcDir }) {
       }
     }
 
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win || win.isDestroyed() || isPickerWindow(win)) continue;
+
+      const wc = win.webContents;
+      if (
+        wc &&
+        typeof wc.isDestroyed === 'function' &&
+        !wc.isDestroyed()
+      ) {
+        return wc;
+      }
+    }
+
     return null;
+  }
+
+  /**
+   * @param {import('electron').WebContents} hostWc
+   * @param {import('child_process').ChildProcessWithoutNullStreams} child
+   * @param {() => void} onReady
+   */
+  function attachApplicationLoopbackWhenReady(hostWc, child, onReady) {
+    const complete = () => {
+      attachApplicationLoopbackStdoutPcm(hostWc);
+      onReady();
+    };
+
+    if (child.pid) {
+      complete();
+      return;
+    }
+
+    child.once('spawn', complete);
   }
 
   /**
@@ -379,11 +415,17 @@ function createDisplayMediaPickerController({ srcDir }) {
       /** @type {DisplayMediaStreams} */
       const streams = { video };
 
+      const finishDisplayMedia = () => {
+        callback(streams);
+        closePicker();
+      };
+
       if (audioRequested) {
         if (process.platform === 'win32') {
           const hostWc = resolveHostWebContents(
             hostWebContents,
-            pickerParentWindow
+            pickerParentWindow,
+            pickerWindow
           );
           const hostOk = hostWc != null;
           const isScreen = video.id.startsWith('screen:');
@@ -400,17 +442,36 @@ function createDisplayMediaPickerController({ srcDir }) {
             });
 
             if (albChild != null) {
-              attachApplicationLoopbackStdoutPcm(hostWc);
               setDisplayMediaAudioRoute(hostWc.id, 'application-loopback');
+              if (
+                hostWebContents &&
+                typeof hostWebContents.isDestroyed === 'function' &&
+                !hostWebContents.isDestroyed() &&
+                hostWebContents.id !== hostWc.id
+              ) {
+                setDisplayMediaAudioRoute(
+                  hostWebContents.id,
+                  'application-loopback'
+                );
+              }
+
+              attachApplicationLoopbackWhenReady(hostWc, albChild, () => {
+                console.info('[display-media] ApplicationLoopback PCM attached', {
+                  hostWebContentsId: hostWc.id
+                });
+                finishDisplayMedia();
+              });
             } else {
               streams.audio = 'loopback';
               setDisplayMediaAudioRoute(hostWc.id, 'chromium-loopback');
+              finishDisplayMedia();
             }
           } else {
             streams.audio = 'loopback';
             console.warn(
               '[display-media] host webContents unavailable — ApplicationLoopback skipped, chromium loopback only'
             );
+            finishDisplayMedia();
           }
 
           setImmediate(() =>
@@ -422,13 +483,13 @@ function createDisplayMediaPickerController({ srcDir }) {
         } else {
           streams.audio = 'loopback';
           stopApplicationLoopbackChild();
+          finishDisplayMedia();
         }
       } else {
         stopApplicationLoopbackChild();
+        finishDisplayMedia();
       }
 
-      callback(streams);
-      closePicker();
       return { ok: true };
     });
 

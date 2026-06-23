@@ -935,10 +935,12 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
         const { track, dispose } =
           await createApplicationLoopbackPcmAudioTrack({
             subscribe: sub,
-            signalConsumerReady: () =>
-              pcmReady().then(() => {
-                /**/
-              })
+            signalConsumerReady: async () => {
+              const result = await pcmReady();
+              if (result?.ok === false) {
+                logVoice('ApplicationLoopback PCM consumer ready rejected');
+              }
+            }
           });
         screenShareApplicationLoopbackDisposeRef.current = dispose;
         audioTrack = track;
