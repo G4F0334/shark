@@ -6,8 +6,6 @@ import { useSpeakingState } from '@/features/server/voice/hooks';
 import { cn } from '@sharkord/ui';
 import {
   HeadphoneOff,
-  Headphones,
-  Mic,
   MicOff,
   Monitor,
   Video,

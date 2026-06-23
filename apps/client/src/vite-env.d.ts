@@ -7,6 +7,7 @@ declare global {
     useToken: (token: string) => Promise<void>;
     openSoundsModal?: () => void;
     printVoiceStats?: () => void;
+    RunHotkey?: (bindId: string) => void | Promise<void>;
     DEBUG?: boolean;
 
     // plugin store exposed for plugins to use imperatively

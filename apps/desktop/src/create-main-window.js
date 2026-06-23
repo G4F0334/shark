@@ -6,9 +6,9 @@ import { SHARKORD_SESSION_PARTITION } from './session-config.js';
 const APP_BACKGROUND = '#0a0a0a';
 
 function getTargetUrl() {
-  // if (process.env.SHARKORD_ENV === 'development') {
-  //   return 'http://localhost:5173';
-  // }
+  if (process.env.SHARKORD_ENV === 'development') {
+    return 'http://localhost:5173';
+  }
 
   return 'https://sharkapi.ping-net.kz/';
 }

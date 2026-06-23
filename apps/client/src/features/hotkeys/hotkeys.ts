@@ -25,7 +25,6 @@ const installRunHotkey = () => {
     await hotkey.action(bridge);
   };
 
-  globalThis.RunHotkey = handler;
   window.RunHotkey = handler;
 };
 

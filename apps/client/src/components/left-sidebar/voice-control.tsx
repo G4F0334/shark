@@ -1,7 +1,7 @@
 import { useCurrentVoiceChannelId } from '@/features/server/channels/hooks';
 import { useChannelCan, useIsServerReconnecting } from '@/features/server/hooks';
 import { leaveVoice } from '@/features/server/voice/actions';
-import { useSpeakingState, useVoice } from '@/features/server/voice/hooks';
+import { useVoice } from '@/features/server/voice/hooks';
 import { cn } from '@/lib/utils';
 import { ChannelPermission } from '@sharkord/shared';
 import { Button } from '@sharkord/ui';

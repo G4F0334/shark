@@ -39,7 +39,6 @@ export async function createApplicationLoopbackPcmAudioTrack(opts: {
 
   const queue: Uint8Array[] = [];
   let carry = new Uint8Array(0);
-  let streamEnded = false;
   let unsub: (() => void) | undefined;
   unsub = subscribe(
     (ab) => {
