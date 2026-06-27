@@ -127,16 +127,36 @@ const useVoiceRefs = (
   useEffect(() => {
     if (!screenShareAudioStream || !screenShareAudioRef.current) return;
 
-    if (screenShareAudioRef.current.srcObject !== screenShareAudioStream) {
-      screenShareAudioRef.current.srcObject = screenShareAudioStream;
+    const audioElement = screenShareAudioRef.current;
+
+    if (audioElement.srcObject !== screenShareAudioStream) {
+      audioElement.srcObject = screenShareAudioStream;
     }
 
-    screenShareAudioRef.current.volume = userScreenVolume / 100;
-    screenShareAudioRef.current.muted = ownVoiceState.soundMuted;
+    audioElement.volume = userScreenVolume / 100;
+    audioElement.muted = ownVoiceState.soundMuted;
 
-    applyAudioOutputDevice(screenShareAudioRef.current, devices.playbackId);
+    applyAudioOutputDevice(audioElement, devices.playbackId);
 
-    void screenShareAudioRef.current.play().catch(() => undefined);
+    const playScreenShareAudio = () => {
+      void audioElement.play().catch(() => undefined);
+    };
+
+    playScreenShareAudio();
+
+    const audioTracks = screenShareAudioStream.getAudioTracks();
+
+    audioTracks.forEach((track) => {
+      track.onunmute = playScreenShareAudio;
+      track.onstart = playScreenShareAudio;
+    });
+
+    return () => {
+      audioTracks.forEach((track) => {
+        track.onunmute = null;
+        track.onstart = null;
+      });
+    };
   }, [
     screenShareAudioStream,
     screenShareAudioRef,

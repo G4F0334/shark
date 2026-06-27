@@ -1,6 +1,6 @@
 import { useVoiceUsersByChannelId } from '@/features/server/hooks';
 import { useOwnUserId } from '@/features/server/users/hooks';
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useVoiceRefs } from './hooks/use-voice-refs';
 
 type TScreenShareUserAudioStreamProps = {
@@ -9,13 +9,7 @@ type TScreenShareUserAudioStreamProps = {
 
 const ScreenShareUserAudioStream = memo(
   ({ userId }: TScreenShareUserAudioStreamProps) => {
-    const ownUserId = useOwnUserId();
-    const { screenShareAudioRef, hasScreenShareAudioStream } =
-      useVoiceRefs(userId);
-
-    if (userId === ownUserId || !hasScreenShareAudioStream) {
-      return null;
-    }
+    const { screenShareAudioRef } = useVoiceRefs(userId);
 
     return (
       <audio
@@ -39,16 +33,19 @@ const ScreenShareAudioStreams = memo(
     const voiceUsers = useVoiceUsersByChannelId(channelId);
     const ownUserId = useOwnUserId();
 
+    const remoteVoiceUsers = useMemo(
+      () => voiceUsers.filter((voiceUser) => voiceUser.id !== ownUserId),
+      [voiceUsers, ownUserId]
+    );
+
     return (
       <>
-        {voiceUsers
-          .filter((voiceUser) => voiceUser.id !== ownUserId)
-          .map((voiceUser) => (
-            <ScreenShareUserAudioStream
-              key={voiceUser.id}
-              userId={voiceUser.id}
-            />
-          ))}
+        {remoteVoiceUsers.map((voiceUser) => (
+          <ScreenShareUserAudioStream
+            key={voiceUser.id}
+            userId={voiceUser.id}
+          />
+        ))}
       </>
     );
   }

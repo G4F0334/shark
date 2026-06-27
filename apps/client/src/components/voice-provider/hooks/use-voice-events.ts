@@ -5,7 +5,7 @@ import { getTRPCClient } from '@/lib/trpc';
 import type { TRemoteUserStreamKinds } from '@/types';
 import { StreamKind } from '@sharkord/shared';
 import type { RtpCapabilities } from 'mediasoup-client/types';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 type TEvents = {
   consume: (
@@ -37,6 +37,24 @@ const useVoiceEvents = ({
   const currentVoiceChannelId = useCurrentVoiceChannelId();
   const ownUserId = useOwnUserId();
 
+  const consumeRef = useRef(consume);
+  consumeRef.current = consume;
+
+  const removeRemoteUserStreamRef = useRef(removeRemoteUserStream);
+  removeRemoteUserStreamRef.current = removeRemoteUserStream;
+
+  const removeExternalStreamTrackRef = useRef(removeExternalStreamTrack);
+  removeExternalStreamTrackRef.current = removeExternalStreamTrack;
+
+  const removeExternalStreamRef = useRef(removeExternalStream);
+  removeExternalStreamRef.current = removeExternalStream;
+
+  const clearRemoteUserStreamsForUserRef = useRef(clearRemoteUserStreamsForUser);
+  clearRemoteUserStreamsForUserRef.current = clearRemoteUserStreamsForUser;
+
+  const getRtpCapabilitiesRef = useRef(getRtpCapabilities);
+  getRtpCapabilitiesRef.current = getRtpCapabilities;
+
   useEffect(() => {
     if (!currentVoiceChannelId) {
       logVoice('Voice events not initialized - missing channelId');
@@ -46,6 +64,17 @@ const useVoiceEvents = ({
     const trpc = getTRPCClient();
 
     let isCleaningUp = false;
+
+    const ensureRemoteScreenShareConsumed = (remoteId: number) => {
+      const rtpCapabilities = getRtpCapabilitiesRef.current();
+
+      void consumeRef.current(remoteId, StreamKind.SCREEN, rtpCapabilities);
+      void consumeRef.current(
+        remoteId,
+        StreamKind.SCREEN_AUDIO,
+        rtpCapabilities
+      );
+    };
 
     const onVoiceNewProducerSub = trpc.voice.onNewProducer.subscribe(
       undefined,
@@ -71,7 +100,19 @@ const useVoiceEvents = ({
           });
 
           try {
-            consume(remoteId, kind, getRtpCapabilities());
+            if (
+              kind === StreamKind.SCREEN ||
+              kind === StreamKind.SCREEN_AUDIO
+            ) {
+              ensureRemoteScreenShareConsumed(remoteId);
+              return;
+            }
+
+            void consumeRef.current(
+              remoteId,
+              kind,
+              getRtpCapabilitiesRef.current()
+            );
           } catch (error) {
             logVoice('Error consuming new producer', {
               error,
@@ -104,9 +145,9 @@ const useVoiceEvents = ({
               kind === StreamKind.EXTERNAL_VIDEO ||
               kind === StreamKind.EXTERNAL_AUDIO
             ) {
-              removeExternalStreamTrack(remoteId, kind);
+              removeExternalStreamTrackRef.current(remoteId, kind);
             } else {
-              removeRemoteUserStream(remoteId, kind);
+              removeRemoteUserStreamRef.current(remoteId, kind);
             }
           } catch (error) {
             logVoice('Error removing remote stream for closed producer', {
@@ -130,7 +171,7 @@ const useVoiceEvents = ({
         logVoice('User leave event received', { userId, channelId });
 
         try {
-          clearRemoteUserStreamsForUser(userId);
+          clearRemoteUserStreamsForUserRef.current(userId);
         } catch (error) {
           logVoice('Error clearing remote streams for user', { error });
         }
@@ -139,6 +180,28 @@ const useVoiceEvents = ({
         logVoice('onVoiceUserLeave subscription error', { error });
       }
     });
+
+    const onVoiceUserUpdateStateSub = trpc.voice.onUpdateState.subscribe(
+      undefined,
+      {
+        onData: ({ channelId, userId, state }) => {
+          if (currentVoiceChannelId !== channelId || isCleaningUp) return;
+          if (userId === ownUserId) return;
+
+          if (state.sharingScreen) {
+            logVoice(
+              'Remote user started screen share, ensuring screen consumers',
+              { userId, channelId }
+            );
+
+            ensureRemoteScreenShareConsumed(userId);
+          }
+        },
+        onError: (error) => {
+          logVoice('onVoiceUpdateState subscription error', { error });
+        }
+      }
+    );
 
     const onVoiceRemoveExternalStreamSub =
       trpc.voice.onRemoveExternalStream.subscribe(undefined, {
@@ -151,7 +214,7 @@ const useVoiceEvents = ({
           });
 
           try {
-            removeExternalStream(streamId);
+            removeExternalStreamRef.current(streamId);
           } catch (error) {
             logVoice('Error removing external stream', {
               error,
@@ -173,18 +236,10 @@ const useVoiceEvents = ({
       onVoiceNewProducerSub.unsubscribe();
       onVoiceProducerClosedSub.unsubscribe();
       onVoiceUserLeaveSub.unsubscribe();
+      onVoiceUserUpdateStateSub.unsubscribe();
       onVoiceRemoveExternalStreamSub.unsubscribe();
     };
-  }, [
-    currentVoiceChannelId,
-    ownUserId,
-    consume,
-    removeRemoteUserStream,
-    removeExternalStreamTrack,
-    removeExternalStream,
-    clearRemoteUserStreamsForUser,
-    getRtpCapabilities
-  ]);
+  }, [currentVoiceChannelId, ownUserId]);
 };
 
 export { useVoiceEvents };

@@ -19,6 +19,8 @@ import {
 import { useCallback, useRef } from 'react';
 
 const CONSUME_RETRY_DELAYS_MS = [0, 150, 400, 900];
+const TRANSPORT_WAIT_DELAYS_MS = [0, 50, 150, 400, 1000];
+const CONSUME_IN_PROGRESS_RETRY_MS = 250;
 
 const isRetryableConsumeError = (error: unknown) => {
   if (error instanceof TRPCClientError) {
@@ -242,18 +244,42 @@ const useTransports = ({
       kind: StreamKind,
       rtpCapabilities: RtpCapabilities
     ) => {
+      for (const delayMs of TRANSPORT_WAIT_DELAYS_MS) {
+        if (consumerTransport.current) {
+          break;
+        }
+
+        if (delayMs > 0) {
+          await sleep(delayMs);
+        }
+      }
+
       if (!consumerTransport.current) {
-        logVoice('Consumer transport not available');
+        logVoice('Consumer transport not available after waiting');
         return;
       }
 
       const operationKey = `${remoteId}-${kind}`;
+      const existingConsumer = consumers.current[remoteId]?.[kind];
 
-      if (consumeOperationsInProgress.current.has(operationKey)) {
-        logVoice('Consume operation already in progress', {
+      if (existingConsumer && !existingConsumer.closed) {
+        logVoice('Active consumer already exists, skipping consume', {
           remoteId,
           kind
         });
+        return;
+      }
+
+      if (consumeOperationsInProgress.current.has(operationKey)) {
+        logVoice('Consume operation already in progress, scheduling retry', {
+          remoteId,
+          kind
+        });
+
+        setTimeout(() => {
+          void consume(remoteId, kind, rtpCapabilities);
+        }, CONSUME_IN_PROGRESS_RETRY_MS);
+
         return;
       }
 
