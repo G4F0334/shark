@@ -55,7 +55,7 @@ function consumeDisplayMediaAudioRoute(senderId) {
  * @param {string} opts.srcDir Absolute path to `apps/desktop/src`
  */
 function createDisplayMediaPickerController({ srcDir }) {
-  const preloadPath = path.join(srcDir, 'preload.cjs');
+  const pickerPreloadPath = path.join(srcDir, 'display-picker-preload.cjs');
   const pickerHtmlPath = path.join(srcDir, '..', 'renderer', 'display-picker.html');
 
   /** @type {BrowserWindow | null} */
@@ -214,7 +214,7 @@ function createDisplayMediaPickerController({ srcDir }) {
       autoHideMenuBar: true,
       backgroundColor: '#252525',
       webPreferences: {
-        preload: preloadPath,
+        preload: pickerPreloadPath,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true

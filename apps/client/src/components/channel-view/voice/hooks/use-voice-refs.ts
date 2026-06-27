@@ -108,14 +108,36 @@ const useVoiceRefs = (
   useEffect(() => {
     if (!audioStream || !audioRef.current) return;
 
-    if (audioRef.current.srcObject !== audioStream) {
-      audioRef.current.srcObject = audioStream;
+    const audioElement = audioRef.current;
+
+    if (audioElement.srcObject !== audioStream) {
+      audioElement.srcObject = audioStream;
     }
 
-    audioRef.current.volume = userVolume / 100;
-    audioRef.current.muted = ownVoiceState.soundMuted;
+    audioElement.volume = userVolume / 100;
+    audioElement.muted = ownVoiceState.soundMuted;
 
-    applyAudioOutputDevice(audioRef.current, devices.playbackId);
+    applyAudioOutputDevice(audioElement, devices.playbackId);
+
+    const playVoiceAudio = () => {
+      void audioElement.play().catch(() => undefined);
+    };
+
+    playVoiceAudio();
+
+    const audioTracks = audioStream.getAudioTracks();
+
+    audioTracks.forEach((track) => {
+      track.onunmute = playVoiceAudio;
+      track.onstart = playVoiceAudio;
+    });
+
+    return () => {
+      audioTracks.forEach((track) => {
+        track.onunmute = null;
+        track.onstart = null;
+      });
+    };
   }, [
     audioStream,
     audioRef,

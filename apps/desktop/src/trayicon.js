@@ -87,8 +87,11 @@ export { quitApp };
 let status = 'inactive';
 let oldStatus = 'inactive';
 
-ipcMain.handle('desktop:voice-activity', async (_self, state) => {
+ipcMain.handle('desktop:voice-activity', async (_event, state) => {
+  if (typeof state !== 'string' || !state) return { ok: false };
+
   status = state;
+  return { ok: true };
 });
 
 setInterval(() => {

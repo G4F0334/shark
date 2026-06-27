@@ -1,7 +1,13 @@
-const path = require('node:path');
+const path = require('path');
 const { contextBridge, ipcRenderer } = require('electron');
 
-const { version: appVersion } = require(path.join(__dirname, '..', 'package.json'));
+let appVersion = '0.0.0-dev';
+
+try {
+  appVersion = require(path.join(__dirname, '..', 'package.json')).version;
+} catch (error) {
+  console.warn('[preload] Failed to read app version from package.json', error);
+}
 
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
@@ -22,24 +28,30 @@ contextBridge.exposeInMainWorld('desktop', {
     ipcRenderer.invoke('desktop:consume-display-media-audio-route'),
   subscribeApplicationLoopbackPcm: (onData, onEnd) => {
     if (typeof onData !== 'function' || typeof onEnd !== 'function') {
-      return () => { };
+      return () => {};
     }
+
     const onChunk = (_e, payload) => {
       const buf = Buffer.isBuffer(payload)
         ? payload
         : payload
           ? Buffer.from(payload)
           : null;
+
       if (!buf || buf.byteLength === 0) return;
+
       const copy = new Uint8Array(buf.byteLength);
       copy.set(buf);
       onData(copy.buffer);
     };
+
     const onPcmEnd = () => {
       onEnd();
     };
+
     ipcRenderer.on('desktop:application-loopback-pcm', onChunk);
     ipcRenderer.on('desktop:application-loopback-pcm-end', onPcmEnd);
+
     return () => {
       ipcRenderer.removeListener('desktop:application-loopback-pcm', onChunk);
       ipcRenderer.removeListener(

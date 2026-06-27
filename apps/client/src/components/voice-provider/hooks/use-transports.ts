@@ -260,15 +260,6 @@ const useTransports = ({
       }
 
       const operationKey = `${remoteId}-${kind}`;
-      const existingConsumer = consumers.current[remoteId]?.[kind];
-
-      if (existingConsumer && !existingConsumer.closed) {
-        logVoice('Active consumer already exists, skipping consume', {
-          remoteId,
-          kind
-        });
-        return;
-      }
 
       if (consumeOperationsInProgress.current.has(operationKey)) {
         logVoice('Consume operation already in progress, scheduling retry', {

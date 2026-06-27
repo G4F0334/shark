@@ -65,6 +65,19 @@ const useVoiceEvents = ({
 
     let isCleaningUp = false;
 
+    const ensureRemoteUserMediaConsumed = (remoteId: number) => {
+      const rtpCapabilities = getRtpCapabilitiesRef.current();
+
+      void consumeRef.current(remoteId, StreamKind.AUDIO, rtpCapabilities);
+      void consumeRef.current(remoteId, StreamKind.VIDEO, rtpCapabilities);
+      void consumeRef.current(remoteId, StreamKind.SCREEN, rtpCapabilities);
+      void consumeRef.current(
+        remoteId,
+        StreamKind.SCREEN_AUDIO,
+        rtpCapabilities
+      );
+    };
+
     const ensureRemoteScreenShareConsumed = (remoteId: number) => {
       const rtpCapabilities = getRtpCapabilitiesRef.current();
 
@@ -181,6 +194,23 @@ const useVoiceEvents = ({
       }
     });
 
+    const onVoiceUserJoinSub = trpc.voice.onJoin.subscribe(undefined, {
+      onData: ({ channelId, userId }) => {
+        if (currentVoiceChannelId !== channelId || isCleaningUp) return;
+        if (userId === ownUserId) return;
+
+        logVoice('User join event received, ensuring remote media consumers', {
+          userId,
+          channelId
+        });
+
+        ensureRemoteUserMediaConsumed(userId);
+      },
+      onError: (error) => {
+        logVoice('onVoiceUserJoin subscription error', { error });
+      }
+    });
+
     const onVoiceUserUpdateStateSub = trpc.voice.onUpdateState.subscribe(
       undefined,
       {
@@ -236,6 +266,7 @@ const useVoiceEvents = ({
       onVoiceNewProducerSub.unsubscribe();
       onVoiceProducerClosedSub.unsubscribe();
       onVoiceUserLeaveSub.unsubscribe();
+      onVoiceUserJoinSub.unsubscribe();
       onVoiceUserUpdateStateSub.unsubscribe();
       onVoiceRemoveExternalStreamSub.unsubscribe();
     };
