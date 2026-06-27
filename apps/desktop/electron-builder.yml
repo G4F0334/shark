@@ -12,6 +12,9 @@ files:
 
 asar: true
 
+asarUnpack:
+  - src/**/*.cjs
+
 # uiohook-napi ships NAPI prebuilds (win32-x64, etc.) — no MSVC rebuild needed
 npmRebuild: false
 

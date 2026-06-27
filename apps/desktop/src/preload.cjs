@@ -1,12 +1,11 @@
-const path = require('path');
 const { contextBridge, ipcRenderer } = require('electron');
 
 let appVersion = '0.0.0-dev';
 
 try {
-  appVersion = require(path.join(__dirname, '..', 'package.json')).version;
+  appVersion = ipcRenderer.sendSync('desktop:app-version');
 } catch (error) {
-  console.warn('[preload] Failed to read app version from package.json', error);
+  console.warn('[preload] Failed to read app version', error);
 }
 
 contextBridge.exposeInMainWorld('desktop', {

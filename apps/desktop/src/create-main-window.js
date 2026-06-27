@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
-import path from 'node:path';
 import { attachRendererLogging } from './logger.js';
+import { getPreloadPath } from './paths.js';
 import { SHARKORD_SESSION_PARTITION } from './session-config.js';
 
 const APP_BACKGROUND = '#0a0a0a';
@@ -109,7 +109,7 @@ function createMainWindow({ srcDir }) {
     minHeight: 600,
     backgroundColor: APP_BACKGROUND,
     webPreferences: {
-      preload: path.join(srcDir, 'preload.cjs'),
+      preload: getPreloadPath('preload.cjs'),
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,

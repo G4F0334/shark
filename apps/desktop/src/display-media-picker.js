@@ -8,6 +8,7 @@ import {
   startApplicationLoopbackForDesktopShare,
   stopApplicationLoopbackChild
 } from './application-loopback.js';
+import { getPreloadPath } from './paths.js';
 import { getSharkordSession } from './session-config.js';
 
 /** @type {Map<number, 'application-loopback'|'chromium-loopback'>} */
@@ -55,7 +56,7 @@ function consumeDisplayMediaAudioRoute(senderId) {
  * @param {string} opts.srcDir Absolute path to `apps/desktop/src`
  */
 function createDisplayMediaPickerController({ srcDir }) {
-  const pickerPreloadPath = path.join(srcDir, 'display-picker-preload.cjs');
+  const pickerPreloadPath = getPreloadPath('display-picker-preload.cjs');
   const pickerHtmlPath = path.join(srcDir, '..', 'renderer', 'display-picker.html');
 
   /** @type {BrowserWindow | null} */
