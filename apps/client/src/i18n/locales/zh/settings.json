@@ -36,6 +36,8 @@
   "passwordUpdated": "密码已更新！",
   "othersTitle": "其他",
   "othersDesc": "与 Sharkord 行为相关的常规设置。",
+  "desktopAppVersionLabel": "桌面应用版本",
+  "desktopAppVersionDesc": "已安装的 Sharkord Electron 客户端版本。",
   "autoJoinLastChannelLabel": "自动加入上次频道",
   "autoJoinLastChannelDesc": "连接时自动重新加入上次所在的文字频道。",
   "languageLabel": "界面语言",

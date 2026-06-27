@@ -36,6 +36,8 @@
   "passwordUpdated": "¡Contraseña actualizada!",
   "othersTitle": "Otros",
   "othersDesc": "Ajustes generales relacionados con el comportamiento de Sharkord.",
+  "desktopAppVersionLabel": "Versión de la app de escritorio",
+  "desktopAppVersionDesc": "Versión instalada del cliente Sharkord para Electron.",
   "autoJoinLastChannelLabel": "Unirse automáticamente al último canal",
   "autoJoinLastChannelDesc": "Unirse automáticamente al último canal de texto al conectarse.",
   "languageLabel": "Idioma de la interfaz",

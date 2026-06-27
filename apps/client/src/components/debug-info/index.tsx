@@ -12,6 +12,14 @@ const DebugInfo = memo(() => {
       'font-size: 16px; font-weight: bold;',
       VITE_APP_VERSION
     );
+
+    if (window.desktop?.isElectron === true && window.desktop.appVersion) {
+      console.log(
+        '%cDesktop: %s',
+        'font-size: 16px; font-weight: bold;',
+        window.desktop.appVersion
+      );
+    }
     console.log(
       '%cEnvironment: %s',
       'font-size: 16px; font-weight: bold;',

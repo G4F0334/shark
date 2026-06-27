@@ -37,6 +37,8 @@
   "passwordUpdated": "Пароль обновлен!",
   "othersTitle": "Другие",
   "othersDesc": "Общие настройки, связанные с Sharkord.",
+  "desktopAppVersionLabel": "Версия desktop-приложения",
+  "desktopAppVersionDesc": "Установленная версия клиента Sharkord для Electron.",
   "autoJoinLastChannelLabel": "Автоматическое подключение к последнему каналу",
   "autoJoinLastChannelDesc": "Автоматическое подключение к последнему текстовому каналу при подключении.",
   "languageLabel": "Язык интерфейса",

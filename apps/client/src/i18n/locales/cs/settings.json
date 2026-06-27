@@ -36,6 +36,8 @@
   "passwordUpdated": "Heslo bylo aktualizováno!",
   "othersTitle": "Jiné",
   "othersDesc": "Nastavení chování Sharkordu.",
+  "desktopAppVersionLabel": "Verze desktop aplikace",
+  "desktopAppVersionDesc": "Nainstalovaná verze klienta Sharkord pro Electron.",
   "autoJoinLastChannelLabel": "Připojovat k poslednímu kanálu",
   "autoJoinLastChannelDesc": "Automaticky se připojit k poslednímu navštívenému textovému kanálu.",
   "languageLabel": "Jazyk",

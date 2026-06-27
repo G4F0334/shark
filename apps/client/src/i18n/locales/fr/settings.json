@@ -36,6 +36,8 @@
   "passwordUpdated": "Mot de passe mis à jour !",
   "othersTitle": "Autres",
   "othersDesc": "Paramètres généraux liés au comportement de Sharkord.",
+  "desktopAppVersionLabel": "Version de l'application desktop",
+  "desktopAppVersionDesc": "Version installée du client Sharkord pour Electron.",
   "autoJoinLastChannelLabel": "Rejoindre automatiquement le dernier salon",
   "autoJoinLastChannelDesc": "Rejoindre automatiquement le dernier salon textuel à la connexion.",
   "languageLabel": "Langue de l'interface",
