@@ -213,6 +213,9 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     (() => Promise<void>) | undefined
   >(undefined);
   const deviceRtpCapabilities = useRef<RtpCapabilities | null>(null);
+  const rtpCapabilitiesRef = useRef<RtpCapabilities>(
+    routerRtpCapabilities.current!
+  );
   const audioVideoRefsMap = useRef<Map<number, AudioVideoRefs>>(new Map());
   const previousVoiceChannelIdRef = useRef<number | undefined>(undefined);
   const [streamQualities, setStreamQualities] =
@@ -1194,6 +1197,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
         }
 
         deviceRtpCapabilities.current = recvRtpCapabilities;
+        rtpCapabilitiesRef.current = recvRtpCapabilities;
 
         await createProducerTransport(device);
         await createConsumerTransport(device);
@@ -1272,8 +1276,10 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     removeExternalStreamTrack,
     removeExternalStream,
     clearRemoteUserStreamsForUser,
-    rtpCapabilities:
-      deviceRtpCapabilities.current ?? routerRtpCapabilities.current!
+    getRtpCapabilities: () =>
+      rtpCapabilitiesRef.current ??
+      deviceRtpCapabilities.current ??
+      routerRtpCapabilities.current!
   });
 
   useEffect(() => {

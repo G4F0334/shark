@@ -135,6 +135,8 @@ const useVoiceRefs = (
     screenShareAudioRef.current.muted = ownVoiceState.soundMuted;
 
     applyAudioOutputDevice(screenShareAudioRef.current, devices.playbackId);
+
+    void screenShareAudioRef.current.play().catch(() => undefined);
   }, [
     screenShareAudioStream,
     screenShareAudioRef,

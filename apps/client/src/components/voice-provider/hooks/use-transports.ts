@@ -18,6 +18,21 @@ import {
 } from 'mediasoup-client/types';
 import { useCallback, useRef } from 'react';
 
+const CONSUME_RETRY_DELAYS_MS = [0, 150, 400, 900];
+
+const isRetryableConsumeError = (error: unknown) => {
+  if (error instanceof TRPCClientError) {
+    return error.data?.code === 'NOT_FOUND';
+  }
+
+  return false;
+};
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
 type TUseTransportParams = {
   addRemoteUserStream: (
     userId: number,
@@ -245,134 +260,173 @@ const useTransports = ({
       consumeOperationsInProgress.current.add(operationKey);
 
       try {
-        logVoice('Consuming remote producer', { remoteId, kind });
+        let lastError: unknown;
 
-        const trpc = getTRPCClient();
+        for (
+          let attempt = 0;
+          attempt < CONSUME_RETRY_DELAYS_MS.length;
+          attempt++
+        ) {
+          const retryDelayMs = CONSUME_RETRY_DELAYS_MS[attempt] ?? 0;
 
-        const {
-          producerId,
-          consumerId,
-          consumerKind,
-          consumerRtpParameters,
-          consumerType,
-          qualityLayers
-        } = await trpc.voice.consume.mutate({
-          kind,
-          remoteId,
-          rtpCapabilities
-        });
+          if (retryDelayMs > 0) {
+            await sleep(retryDelayMs);
+          }
 
-        logVoice('Got consumer parameters', {
-          producerId,
-          consumerId,
-          consumerKind,
-          consumerType,
-          qualityLayers,
-          consumerRtpParameters
-        });
-
-        if (!consumers.current[remoteId]) {
-          consumers.current[remoteId] = {};
-        }
-
-        const existingConsumer = consumers.current[remoteId][consumerKind];
-
-        if (existingConsumer && !existingConsumer.closed) {
-          logVoice('Closing existing consumer before creating new one');
-
-          existingConsumer.close();
-          delete consumers.current[remoteId][consumerKind];
-        }
-
-        const newConsumer = await consumerTransport.current.consume({
-          id: consumerId,
-          producerId: producerId,
-          kind: getMediasoupKind(consumerKind),
-          rtpParameters: consumerRtpParameters
-        });
-
-        logVoice('Created new consumer', { newConsumer });
-
-        const cleanupEvents = [
-          'transportclose',
-          'trackended',
-          '@close',
-          'close'
-        ];
-
-        cleanupEvents.forEach((event) => {
-          // @ts-expect-error - YOLO
-          newConsumer?.on(event, () => {
-            logVoice(`Consumer cleanup event "${event}" triggered`, {
+          try {
+            logVoice('Consuming remote producer', {
               remoteId,
-              kind
+              kind,
+              attempt
             });
+
+            const trpc = getTRPCClient();
+
+            const {
+              producerId,
+              consumerId,
+              consumerKind,
+              consumerRtpParameters,
+              consumerType,
+              qualityLayers
+            } = await trpc.voice.consume.mutate({
+              kind,
+              remoteId,
+              rtpCapabilities
+            });
+
+            logVoice('Got consumer parameters', {
+              producerId,
+              consumerId,
+              consumerKind,
+              consumerType,
+              qualityLayers,
+              consumerRtpParameters
+            });
+
+            if (!consumers.current[remoteId]) {
+              consumers.current[remoteId] = {};
+            }
+
+            const existingConsumer = consumers.current[remoteId][consumerKind];
+
+            if (existingConsumer && !existingConsumer.closed) {
+              logVoice('Closing existing consumer before creating new one');
+
+              existingConsumer.close();
+              delete consumers.current[remoteId][consumerKind];
+            }
+
+            const newConsumer = await consumerTransport.current.consume({
+              id: consumerId,
+              producerId: producerId,
+              kind: getMediasoupKind(consumerKind),
+              rtpParameters: consumerRtpParameters
+            });
+
+            logVoice('Created new consumer', { newConsumer });
+
+            const cleanupEvents = [
+              'transportclose',
+              'trackended',
+              '@close',
+              'close'
+            ];
+
+            cleanupEvents.forEach((event) => {
+              // @ts-expect-error - YOLO
+              newConsumer?.on(event, () => {
+                logVoice(`Consumer cleanup event "${event}" triggered`, {
+                  remoteId,
+                  kind
+                });
+
+                if (
+                  kind === StreamKind.EXTERNAL_VIDEO ||
+                  kind === StreamKind.EXTERNAL_AUDIO
+                ) {
+                  removeExternalStreamTrack(remoteId, kind);
+                } else {
+                  removeRemoteUserStream(remoteId, kind);
+                }
+
+                if (consumers.current[remoteId]?.[consumerKind]) {
+                  delete consumers.current[remoteId][consumerKind];
+                }
+
+                consumerCodecs.current.delete(`${remoteId}-${kind}`);
+
+                setRemoteConsumerType(remoteId, kind, undefined);
+                setRemoteStreamQualityLayers(remoteId, kind, []);
+              });
+            });
+
+            consumers.current[remoteId][consumerKind] = newConsumer;
+
+            setRemoteConsumerType(remoteId, kind, consumerType);
+            setRemoteStreamQualityLayers(remoteId, kind, qualityLayers);
+
+            const codecKey = `${remoteId}-${kind}`;
+
+            const negotiatedCodec =
+              newConsumer.rtpParameters?.codecs?.[0]?.mimeType;
+
+            if (negotiatedCodec) {
+              consumerCodecs.current.set(codecKey, negotiatedCodec);
+            }
+
+            if (
+              consumerType === 'simulcast' &&
+              (kind === StreamKind.VIDEO ||
+                kind === StreamKind.SCREEN ||
+                kind === StreamKind.EXTERNAL_VIDEO)
+            ) {
+              const quality = getStreamQuality(remoteId, kind);
+
+              if (quality.mode === 'layer') {
+                await trpc.voice.setConsumerQuality.mutate({
+                  remoteId,
+                  kind,
+                  quality
+                });
+              }
+            }
+
+            const stream = new MediaStream();
+
+            stream.addTrack(newConsumer.track);
 
             if (
               kind === StreamKind.EXTERNAL_VIDEO ||
               kind === StreamKind.EXTERNAL_AUDIO
             ) {
-              removeExternalStreamTrack(remoteId, kind);
+              addExternalStreamTrack(remoteId, stream, kind);
             } else {
-              removeRemoteUserStream(remoteId, kind);
+              addRemoteUserStream(remoteId, stream, kind);
             }
 
-            if (consumers.current[remoteId]?.[consumerKind]) {
-              delete consumers.current[remoteId][consumerKind];
+            return;
+          } catch (error) {
+            lastError = error;
+
+            if (
+              !isRetryableConsumeError(error) ||
+              attempt === CONSUME_RETRY_DELAYS_MS.length - 1
+            ) {
+              throw error;
             }
 
-            consumerCodecs.current.delete(`${remoteId}-${kind}`);
-
-            setRemoteConsumerType(remoteId, kind, undefined);
-            setRemoteStreamQualityLayers(remoteId, kind, []);
-          });
-        });
-
-        consumers.current[remoteId][consumerKind] = newConsumer;
-
-        setRemoteConsumerType(remoteId, kind, consumerType);
-        setRemoteStreamQualityLayers(remoteId, kind, qualityLayers);
-
-        const codecKey = `${remoteId}-${kind}`;
-
-        const negotiatedCodec =
-          newConsumer.rtpParameters?.codecs?.[0]?.mimeType;
-
-        if (negotiatedCodec) {
-          consumerCodecs.current.set(codecKey, negotiatedCodec);
-        }
-
-        if (
-          consumerType === 'simulcast' &&
-          (kind === StreamKind.VIDEO ||
-            kind === StreamKind.SCREEN ||
-            kind === StreamKind.EXTERNAL_VIDEO)
-        ) {
-          const quality = getStreamQuality(remoteId, kind);
-
-          if (quality.mode === 'layer') {
-            await trpc.voice.setConsumerQuality.mutate({
+            logVoice('Producer not ready yet, retrying consume', {
               remoteId,
               kind,
-              quality
+              attempt
             });
           }
         }
 
-        const stream = new MediaStream();
-
-        stream.addTrack(newConsumer.track);
-
-        if (
-          kind === StreamKind.EXTERNAL_VIDEO ||
-          kind === StreamKind.EXTERNAL_AUDIO
-        ) {
-          addExternalStreamTrack(remoteId, stream, kind);
-        } else {
-          addRemoteUserStream(remoteId, stream, kind);
-        }
+        throw lastError;
       } catch (error) {
-        logVoice('Error consuming remote producer', { error });
+        logVoice('Error consuming remote producer', { error, remoteId, kind });
       } finally {
         consumeOperationsInProgress.current.delete(operationKey);
       }

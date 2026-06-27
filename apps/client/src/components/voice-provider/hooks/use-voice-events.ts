@@ -23,7 +23,7 @@ type TEvents = {
   ) => void;
   removeExternalStream: (streamId: number) => void;
   clearRemoteUserStreamsForUser: (userId: number) => void;
-  rtpCapabilities: RtpCapabilities;
+  getRtpCapabilities: () => RtpCapabilities;
 };
 
 const useVoiceEvents = ({
@@ -32,7 +32,7 @@ const useVoiceEvents = ({
   removeExternalStreamTrack,
   removeExternalStream,
   clearRemoteUserStreamsForUser,
-  rtpCapabilities
+  getRtpCapabilities
 }: TEvents) => {
   const currentVoiceChannelId = useCurrentVoiceChannelId();
   const ownUserId = useOwnUserId();
@@ -71,7 +71,7 @@ const useVoiceEvents = ({
           });
 
           try {
-            consume(remoteId, kind, rtpCapabilities);
+            consume(remoteId, kind, getRtpCapabilities());
           } catch (error) {
             logVoice('Error consuming new producer', {
               error,
@@ -183,7 +183,7 @@ const useVoiceEvents = ({
     removeExternalStreamTrack,
     removeExternalStream,
     clearRemoteUserStreamsForUser,
-    rtpCapabilities
+    getRtpCapabilities
   ]);
 };
 

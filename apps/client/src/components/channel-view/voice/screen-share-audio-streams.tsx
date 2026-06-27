@@ -42,10 +42,7 @@ const ScreenShareAudioStreams = memo(
     return (
       <>
         {voiceUsers
-          .filter(
-            (voiceUser) =>
-              voiceUser.state.sharingScreen && voiceUser.id !== ownUserId
-          )
+          .filter((voiceUser) => voiceUser.id !== ownUserId)
           .map((voiceUser) => (
             <ScreenShareUserAudioStream
               key={voiceUser.id}
