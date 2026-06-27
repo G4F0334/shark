@@ -839,6 +839,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
   const stopScreenShareStream = useCallback(() => {
     logVoice('Stopping screen share stream');
 
+    void window.desktop?.displayMediaPicker?.reset?.();
     void disposeScreenShareApplicationLoopbackAudio();
     void window.desktop?.applicationLoopbackStop?.();
 
@@ -895,9 +896,15 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
         displayMediaConstraints
       );
 
-      const stream = await navigator.mediaDevices.getDisplayMedia(
-        displayMediaConstraints
-      );
+      const stream = await Promise.race([
+        navigator.mediaDevices.getDisplayMedia(displayMediaConstraints),
+        new Promise<MediaStream>((_, reject) => {
+          setTimeout(
+            () => reject(new Error('Display media request timed out')),
+            60_000
+          );
+        })
+      ]);
 
       let audioTrack: MediaStreamTrack | undefined = stream.getAudioTracks()[0];
       let routeAudio: 'application-loopback' | 'chromium-loopback' | 'none' =
@@ -1108,6 +1115,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
         throw new Error('No video track obtained for screen share');
       }
     } catch (error) {
+      void window.desktop?.displayMediaPicker?.reset?.();
+
       if (isDisplayMediaUserCancel(error)) {
         logVoice('Screen share cancelled by user');
       } else {

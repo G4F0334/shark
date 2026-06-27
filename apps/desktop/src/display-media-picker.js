@@ -74,6 +74,53 @@ function createDisplayMediaPickerController({ srcDir }) {
    */
   let pending = null;
 
+  /** @type {((streams: DisplayMediaStreams) => void) | null} */
+  let inFlightDisplayMediaCallback = null;
+
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let loopbackSpawnTimer = null;
+
+  function clearLoopbackSpawnTimer() {
+    if (loopbackSpawnTimer) {
+      clearTimeout(loopbackSpawnTimer);
+      loopbackSpawnTimer = null;
+    }
+  }
+
+  function completeDisplayMediaCallback(
+    callback,
+    /** @type {DisplayMediaStreams} */ streams
+  ) {
+    inFlightDisplayMediaCallback = null;
+    clearLoopbackSpawnTimer();
+
+    setImmediate(() => {
+      try {
+        callback(streams);
+      } catch {
+        // Electron 34+ throws when video was requested but not provided.
+        // Renderer still receives AbortError from getDisplayMedia.
+      }
+    });
+  }
+
+  function abortInFlightDisplayMedia() {
+    if (!inFlightDisplayMediaCallback) return;
+
+    const callback = inFlightDisplayMediaCallback;
+    inFlightDisplayMediaCallback = null;
+    clearLoopbackSpawnTimer();
+    denyDisplayMediaCallback(callback);
+  }
+
+  function resetDisplayMediaPickerState(reason = 'reset') {
+    console.info('[display-media] reset picker state', { reason });
+
+    denyPendingRequest({ closeWindow: true });
+    abortInFlightDisplayMedia();
+    stopApplicationLoopbackChild();
+  }
+
   function denyDisplayMediaCallback(callback) {
     setImmediate(() => {
       try {
@@ -190,7 +237,10 @@ function createDisplayMediaPickerController({ srcDir }) {
 
     pickerWindow.on('closed', () => {
       pickerWindow = null;
-      denyPendingRequest({ closeWindow: false });
+
+      if (pending) {
+        denyPendingRequest({ closeWindow: false });
+      }
     });
 
     pickerWindow.loadFile(pickerHtmlPath);
@@ -274,19 +324,56 @@ function createDisplayMediaPickerController({ srcDir }) {
    * @param {import('electron').WebContents} hostWc
    * @param {import('child_process').ChildProcessWithoutNullStreams} child
    * @param {() => void} onReady
+   * @param {{ timeoutMs?: number }} [opts]
    */
-  function attachApplicationLoopbackWhenReady(hostWc, child, onReady) {
-    const complete = () => {
-      attachApplicationLoopbackStdoutPcm(hostWc);
+  function attachApplicationLoopbackWhenReady(hostWc, child, onReady, opts) {
+    const timeoutMs = opts?.timeoutMs ?? 4_000;
+    let completed = false;
+
+    const detachChildListeners = () => {
+      child.removeListener('spawn', onSpawn);
+      child.removeListener('error', onChildError);
+      child.removeListener('exit', onChildExit);
+    };
+
+    const finish = (attachPcm) => {
+      if (completed) return;
+      completed = true;
+      clearLoopbackSpawnTimer();
+      detachChildListeners();
+      if (attachPcm) attachApplicationLoopbackStdoutPcm(hostWc);
       onReady();
     };
 
-    if (child.pid) {
-      complete();
-      return;
-    }
+    const onSpawn = () => finish(true);
 
-    child.once('spawn', complete);
+    const onChildError = (err) => {
+      console.warn('[display-media] ApplicationLoopback spawn error', err);
+      finish(false);
+    };
+
+    const onChildExit = (code, signal) => {
+      console.warn('[display-media] ApplicationLoopback exited before attach', {
+        code,
+        signal
+      });
+      finish(false);
+    };
+
+    loopbackSpawnTimer = setTimeout(() => {
+      console.warn(
+        '[display-media] ApplicationLoopback spawn timeout, continuing without PCM attach'
+      );
+      finish(false);
+    }, timeoutMs);
+
+    child.once('spawn', onSpawn);
+    child.once('error', onChildError);
+    child.once('exit', onChildExit);
+
+    if (child.pid) {
+      finish(true);
+    }
   }
 
   /**
@@ -339,9 +426,11 @@ function createDisplayMediaPickerController({ srcDir }) {
 
   function registerSessionHandler() {
     getSharkordSession().setDisplayMediaRequestHandler((request, callback) => {
-      if (pending) {
-        denyDisplayMediaCallback(callback);
-        return;
+      if (pending || inFlightDisplayMediaCallback) {
+        console.warn(
+          '[display-media] superseding stale display media request'
+        );
+        resetDisplayMediaPickerState('superseded');
       }
 
       pending = {
@@ -415,8 +504,13 @@ function createDisplayMediaPickerController({ srcDir }) {
       /** @type {DisplayMediaStreams} */
       const streams = { video };
 
+      inFlightDisplayMediaCallback = callback;
+
       const finishDisplayMedia = () => {
-        callback(streams);
+        completeDisplayMediaCallback(callback, streams);
+      };
+
+      const closePickerAfterSelection = () => {
         closePicker();
       };
 
@@ -430,6 +524,8 @@ function createDisplayMediaPickerController({ srcDir }) {
           const hostOk = hostWc != null;
           const isScreen = video.id.startsWith('screen:');
           const excludePid = resolveSharkExcludePid(hostWc, sharkExcludePid);
+
+          closePickerAfterSelection();
 
           if (hostOk) {
             const exePath = resolveApplicationLoopbackExe(srcDir);
@@ -483,10 +579,12 @@ function createDisplayMediaPickerController({ srcDir }) {
         } else {
           streams.audio = 'loopback';
           stopApplicationLoopbackChild();
+          closePickerAfterSelection();
           finishDisplayMedia();
         }
       } else {
         stopApplicationLoopbackChild();
+        closePickerAfterSelection();
         finishDisplayMedia();
       }
 
@@ -495,6 +593,10 @@ function createDisplayMediaPickerController({ srcDir }) {
 
     ipcMain.handle('desktop:display-media:cancel', async () => {
       denyPendingRequest();
+      return { ok: true };
+    });
+    ipcMain.handle('desktop:display-media:reset', async () => {
+      resetDisplayMediaPickerState('renderer-reset');
       return { ok: true };
     });
     ipcMain.handle('desktop:application-loopback-stop', async () => {
@@ -514,7 +616,12 @@ function createDisplayMediaPickerController({ srcDir }) {
     );
   }
 
-  return { registerIpc, registerSessionHandler, stopApplicationLoopbackChild };
+  return {
+    registerIpc,
+    registerSessionHandler,
+    stopApplicationLoopbackChild,
+    resetDisplayMediaPickerState
+  };
 }
 
 export { createDisplayMediaPickerController };

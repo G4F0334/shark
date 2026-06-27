@@ -43,6 +43,7 @@ declare global {
           error?: string;
         }>;
         cancel: () => Promise<{ ok: boolean }>;
+        reset: () => Promise<{ ok: boolean }>;
       };
     };
   }
