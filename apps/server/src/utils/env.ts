@@ -14,7 +14,7 @@ const DESKTOP_VERSION =
     ? process.env.SHARKORD_DESKTOP_VERSION
     : '0.0.24';
 
-const DESKTOP_DOWNLOAD_URL = process.env.SHARKORD_DESKTOP_DOWNLOAD_URL || 'http://ping-net.ddns.net:4896/win-unpacked.tar';
+const DESKTOP_DOWNLOAD_URL = process.env.SHARKORD_DESKTOP_DOWNLOAD_URL || 'http://ping-net.ddns.net:4896/win-unpacked.7z';
 
 const BUILD_DATE =
   typeof SHARKORD_BUILD_DATE !== 'undefined' ? SHARKORD_BUILD_DATE : 'dev';
