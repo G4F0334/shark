@@ -9,6 +9,7 @@ import { installDesktopLogging } from './logger.js';
 import './hotkeys.js';
 import { registerDesktopStorageIpc } from './storage.js';
 import { CloseState } from './trayicon.js';
+import { registerDesktopUpdateIpc } from './desktop-update.js';
 
 installKnownChromiumStderrIgnore();
 
@@ -44,6 +45,7 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     installDesktopLogging();
     registerDesktopStorageIpc();
+    registerDesktopUpdateIpc();
     displayPicker.registerIpc();
     displayPicker.registerSessionHandler();
     mainWindow = createMainWindow({ srcDir });

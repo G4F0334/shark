@@ -1,7 +1,11 @@
 import type { TServerInfo } from '@sharkord/shared';
 import http from 'http';
 import { getSettings } from '../db/queries/server';
-import { SERVER_VERSION } from '../utils/env';
+import {
+  DESKTOP_DOWNLOAD_URL,
+  DESKTOP_VERSION,
+  SERVER_VERSION
+} from '../utils/env';
 
 const infoRouteHandler = async (
   req: http.IncomingMessage,
@@ -15,7 +19,13 @@ const infoRouteHandler = async (
     name: settings.name,
     description: settings.description,
     logo: settings.logo,
-    allowNewUsers: settings.allowNewUsers
+    allowNewUsers: settings.allowNewUsers,
+    ...(DESKTOP_DOWNLOAD_URL
+      ? {
+          desktopVersion: DESKTOP_VERSION,
+          desktopDownloadUrl: DESKTOP_DOWNLOAD_URL
+        }
+      : {})
   };
 
   res.writeHead(200, { 'Content-Type': 'application/json' });

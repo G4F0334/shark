@@ -4,6 +4,11 @@ declare global {
   interface Window {
     desktop?: {
       platform: NodeJS.Platform;
+      isElectron?: boolean;
+      appVersion?: string;
+      openDesktopUpdateDownload?: (
+        url: string
+      ) => Promise<{ ok: boolean; error?: string }>;
       applicationLoopbackStop?: () => Promise<{ ok: boolean }>;
       applicationLoopbackPcmConsumerReady?: () => Promise<{ ok: boolean }>;
       consumeDisplayMediaAudioRoute?: () => Promise<{

@@ -1,8 +1,14 @@
+const path = require('node:path');
 const { contextBridge, ipcRenderer } = require('electron');
+
+const { version: appVersion } = require(path.join(__dirname, '..', 'package.json'));
 
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
   isElectron: true,
+  appVersion,
+  openDesktopUpdateDownload: (url) =>
+    ipcRenderer.invoke('desktop:open-update-download', url),
   voiceActivity: (status) => ipcRenderer.invoke('desktop:voice-activity', status),
   reloadHotkeys: (keys) => ipcRenderer.invoke('desktop:reload-hotkeys', keys),
   changeHotkey: (newHotkey) => ipcRenderer.invoke('desktop:change-hotkey', newHotkey),

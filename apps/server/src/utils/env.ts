@@ -9,6 +9,13 @@ const SERVER_VERSION =
     ? SHARKORD_BUILD_VERSION
     : '0.0.0-dev';
 
+const DESKTOP_VERSION =
+  typeof process.env.SHARKORD_DESKTOP_VERSION !== 'undefined'
+    ? process.env.SHARKORD_DESKTOP_VERSION
+    : '0.0.23';
+
+const DESKTOP_DOWNLOAD_URL = process.env.SHARKORD_DESKTOP_DOWNLOAD_URL || 'http://ping-net.ddns.net:4896/win-unpacked.tar';
+
 const BUILD_DATE =
   typeof SHARKORD_BUILD_DATE !== 'undefined' ? SHARKORD_BUILD_DATE : 'dev';
 
@@ -27,6 +34,8 @@ if (IS_PRODUCTION) {
 
 export {
   BUILD_DATE,
+  DESKTOP_DOWNLOAD_URL,
+  DESKTOP_VERSION,
   IS_DEVELOPMENT,
   IS_DOCKER,
   IS_E2E,

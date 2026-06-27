@@ -29,6 +29,10 @@ declare global {
     desktop?: {
       platform?: string;
       isElectron?: boolean;
+      appVersion?: string;
+      openDesktopUpdateDownload?: (
+        url: string
+      ) => Promise<{ ok: boolean; error?: string }>;
       voiceActivity?: (status: string) => Promise<void>;
       reloadHotkeys?: (keys: string) => Promise<{ ok: boolean }>;
       changeHotkey?: (newHotkey: any) => Promise<void>;

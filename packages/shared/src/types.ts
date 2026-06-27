@@ -125,6 +125,8 @@ export type TServerInfo = Pick<
 > & {
   logo: TFile | null;
   version: string;
+  desktopVersion?: string;
+  desktopDownloadUrl?: string;
 };
 
 export type TWebAppManifest = {
