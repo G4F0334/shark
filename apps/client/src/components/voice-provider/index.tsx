@@ -27,6 +27,7 @@ import { getResWidthHeight } from '@/helpers/get-res-with-height';
 import { pickScreenShareH264Codec } from '@/helpers/pick-screen-share-h264-codec';
 import { useScreenShareSupport } from '@/hooks/use-screen-share-support';
 import { useOwnVoiceTrayActivity } from './hooks/use-own-voice-tray-activity';
+import { useVoiceConsumerSync } from './hooks/use-voice-consumer-sync';
 import { getTRPCClient } from '@/lib/trpc';
 import { NoiseSuppression, VideoCodec, type TStreamQuality } from '@/types';
 import {
@@ -408,6 +409,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     createConsumerTransport,
     consume,
     consumeExistingProducers,
+    syncMissingProducers,
     cleanupTransports,
     getConsumerCodec
   } = useTransports({
@@ -1212,6 +1214,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
         await createConsumerTransport(device);
         await consumeExistingProducers(recvRtpCapabilities);
         await startMicStream();
+        await consumeExistingProducers(recvRtpCapabilities);
+        await syncMissingProducers(recvRtpCapabilities);
 
         startMonitoring(producerTransport.current, consumerTransport.current);
         setConnectionStatus(ConnectionStatus.CONNECTED);
@@ -1231,6 +1235,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
       createProducerTransport,
       createConsumerTransport,
       consumeExistingProducers,
+      syncMissingProducers,
       startMicStream,
       startMonitoring,
       producerTransport,
@@ -1285,6 +1290,15 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     removeExternalStreamTrack,
     removeExternalStream,
     clearRemoteUserStreamsForUser,
+    getRtpCapabilities: () =>
+      rtpCapabilitiesRef.current ??
+      deviceRtpCapabilities.current ??
+      routerRtpCapabilities.current!
+  });
+
+  useVoiceConsumerSync({
+    connectionStatus,
+    syncMissingProducers,
     getRtpCapabilities: () =>
       rtpCapabilitiesRef.current ??
       deviceRtpCapabilities.current ??

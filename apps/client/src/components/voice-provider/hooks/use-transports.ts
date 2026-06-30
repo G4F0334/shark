@@ -18,7 +18,7 @@ import {
 } from 'mediasoup-client/types';
 import { useCallback, useRef } from 'react';
 
-const CONSUME_RETRY_DELAYS_MS = [0, 150, 400, 900];
+const CONSUME_RETRY_DELAYS_MS = [0, 150, 400, 900, 2000, 4000];
 const TRANSPORT_WAIT_DELAYS_MS = [0, 50, 150, 400, 1000];
 const CONSUME_IN_PROGRESS_RETRY_MS = 250;
 
@@ -260,6 +260,19 @@ const useTransports = ({
       }
 
       const operationKey = `${remoteId}-${kind}`;
+      const existingConsumer = consumers.current[remoteId]?.[kind];
+
+      if (
+        existingConsumer &&
+        !existingConsumer.closed &&
+        existingConsumer.track?.readyState === 'live'
+      ) {
+        logVoice('Live consumer already exists, skipping consume', {
+          remoteId,
+          kind
+        });
+        return;
+      }
 
       if (consumeOperationsInProgress.current.has(operationKey)) {
         logVoice('Consume operation already in progress, scheduling retry', {
@@ -340,6 +353,10 @@ const useTransports = ({
               kind: getMediasoupKind(consumerKind),
               rtpParameters: consumerRtpParameters
             });
+
+            if (newConsumer.paused) {
+              await newConsumer.resume();
+            }
 
             logVoice('Created new consumer', { newConsumer });
 
@@ -519,6 +536,65 @@ const useTransports = ({
     [consume]
   );
 
+  const hasActiveConsumer = useCallback((remoteId: number, kind: StreamKind) => {
+    const consumer = consumers.current[remoteId]?.[kind];
+
+    return (
+      !!consumer &&
+      !consumer.closed &&
+      consumer.track?.readyState === 'live'
+    );
+  }, []);
+
+  const syncMissingProducers = useCallback(
+    async (rtpCapabilities: RtpCapabilities) => {
+      if (!consumerTransport.current) return;
+
+      const trpc = getTRPCClient();
+
+      try {
+        const {
+          remoteAudioIds,
+          remoteScreenIds,
+          remoteScreenAudioIds,
+          remoteVideoIds,
+          remoteExternalStreamIds
+        } = await trpc.voice.getProducers.query();
+
+        const ensure = (remoteId: number, kind: StreamKind) => {
+          if (hasActiveConsumer(remoteId, kind)) return;
+
+          logVoice('Syncing missing producer consumer', { remoteId, kind });
+          void consume(remoteId, kind, rtpCapabilities);
+        };
+
+        remoteAudioIds.forEach((remoteId) => {
+          ensure(remoteId, StreamKind.AUDIO);
+        });
+
+        remoteVideoIds.forEach((remoteId) => {
+          ensure(remoteId, StreamKind.VIDEO);
+        });
+
+        remoteScreenIds.forEach((remoteId) => {
+          ensure(remoteId, StreamKind.SCREEN);
+        });
+
+        remoteScreenAudioIds.forEach((remoteId) => {
+          ensure(remoteId, StreamKind.SCREEN_AUDIO);
+        });
+
+        remoteExternalStreamIds.forEach((streamId: number) => {
+          ensure(streamId, StreamKind.EXTERNAL_AUDIO);
+          ensure(streamId, StreamKind.EXTERNAL_VIDEO);
+        });
+      } catch (error) {
+        logVoice('Error syncing missing producers', { error });
+      }
+    },
+    [consume, hasActiveConsumer]
+  );
+
   const getConsumerCodec = useCallback(
     (remoteId: number, kind: StreamKind): string | undefined => {
       return consumerCodecs.current.get(`${remoteId}-${kind}`);
@@ -567,6 +643,7 @@ const useTransports = ({
     createConsumerTransport,
     consume,
     consumeExistingProducers,
+    syncMissingProducers,
     cleanupTransports,
     getConsumerCodec
   };

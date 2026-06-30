@@ -65,10 +65,28 @@ const useVoiceEvents = ({
 
     let isCleaningUp = false;
 
+    const scheduleRemoteAudioConsume = (remoteId: number) => {
+      const rtpCapabilities = getRtpCapabilitiesRef.current();
+      const retryDelaysMs = [0, 400, 1200, 3000, 6000];
+
+      retryDelaysMs.forEach((delayMs) => {
+        window.setTimeout(() => {
+          if (isCleaningUp) return;
+
+          void consumeRef.current(
+            remoteId,
+            StreamKind.AUDIO,
+            rtpCapabilities
+          );
+        }, delayMs);
+      });
+    };
+
     const ensureRemoteUserMediaConsumed = (remoteId: number) => {
       const rtpCapabilities = getRtpCapabilitiesRef.current();
 
-      void consumeRef.current(remoteId, StreamKind.AUDIO, rtpCapabilities);
+      scheduleRemoteAudioConsume(remoteId);
+
       void consumeRef.current(remoteId, StreamKind.VIDEO, rtpCapabilities);
       void consumeRef.current(remoteId, StreamKind.SCREEN, rtpCapabilities);
       void consumeRef.current(
@@ -118,6 +136,11 @@ const useVoiceEvents = ({
               kind === StreamKind.SCREEN_AUDIO
             ) {
               ensureRemoteScreenShareConsumed(remoteId);
+              return;
+            }
+
+            if (kind === StreamKind.AUDIO) {
+              scheduleRemoteAudioConsume(remoteId);
               return;
             }
 
