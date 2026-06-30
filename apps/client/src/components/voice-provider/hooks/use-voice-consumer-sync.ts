@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { ConnectionStatus } from '../index';
 
 const SYNC_INTERVAL_MS = 20_000;
-const INITIAL_SYNC_DELAY_MS = 2_000;
+const INITIAL_SYNC_DELAYS_MS = [0, 2_000, 8_000];
 
 type TUseVoiceConsumerSyncParams = {
   connectionStatus: ConnectionStatus;
@@ -36,12 +36,16 @@ const useVoiceConsumerSync = ({
       void syncMissingProducersRef.current(getRtpCapabilitiesRef.current());
     };
 
-    const initialTimer = window.setTimeout(runSync, INITIAL_SYNC_DELAY_MS);
+    const initialTimers = INITIAL_SYNC_DELAYS_MS.map((delayMs) =>
+      window.setTimeout(runSync, delayMs)
+    );
     const intervalId = window.setInterval(runSync, SYNC_INTERVAL_MS);
 
     return () => {
       cancelled = true;
-      window.clearTimeout(initialTimer);
+      initialTimers.forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
       window.clearInterval(intervalId);
     };
   }, [connectionStatus]);

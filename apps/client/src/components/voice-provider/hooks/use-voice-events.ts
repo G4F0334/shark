@@ -13,6 +13,8 @@ type TEvents = {
     kind: StreamKind,
     rtpCapabilities: RtpCapabilities
   ) => Promise<void>;
+  releaseRemoteConsumer: (remoteId: number, kind: StreamKind) => void;
+  releaseRemoteConsumersForUser: (userId: number) => void;
   removeRemoteUserStream: (
     userId: number,
     kind: TRemoteUserStreamKinds
@@ -24,21 +26,33 @@ type TEvents = {
   removeExternalStream: (streamId: number) => void;
   clearRemoteUserStreamsForUser: (userId: number) => void;
   getRtpCapabilities: () => RtpCapabilities;
+  isVoiceReady: () => boolean;
 };
+
+const REMOTE_AUDIO_CONSUME_DELAYS_MS = [0, 400, 1200, 3000, 6000];
 
 const useVoiceEvents = ({
   consume,
+  releaseRemoteConsumer,
+  releaseRemoteConsumersForUser,
   removeRemoteUserStream,
   removeExternalStreamTrack,
   removeExternalStream,
   clearRemoteUserStreamsForUser,
-  getRtpCapabilities
+  getRtpCapabilities,
+  isVoiceReady
 }: TEvents) => {
   const currentVoiceChannelId = useCurrentVoiceChannelId();
   const ownUserId = useOwnUserId();
 
   const consumeRef = useRef(consume);
   consumeRef.current = consume;
+
+  const releaseRemoteConsumerRef = useRef(releaseRemoteConsumer);
+  releaseRemoteConsumerRef.current = releaseRemoteConsumer;
+
+  const releaseRemoteConsumersForUserRef = useRef(releaseRemoteConsumersForUser);
+  releaseRemoteConsumersForUserRef.current = releaseRemoteConsumersForUser;
 
   const removeRemoteUserStreamRef = useRef(removeRemoteUserStream);
   removeRemoteUserStreamRef.current = removeRemoteUserStream;
@@ -55,6 +69,9 @@ const useVoiceEvents = ({
   const getRtpCapabilitiesRef = useRef(getRtpCapabilities);
   getRtpCapabilitiesRef.current = getRtpCapabilities;
 
+  const isVoiceReadyRef = useRef(isVoiceReady);
+  isVoiceReadyRef.current = isVoiceReady;
+
   useEffect(() => {
     if (!currentVoiceChannelId) {
       logVoice('Voice events not initialized - missing channelId');
@@ -64,25 +81,33 @@ const useVoiceEvents = ({
     const trpc = getTRPCClient();
 
     let isCleaningUp = false;
+    const scheduledTimeouts: ReturnType<typeof setTimeout>[] = [];
+
+    const schedule = (callback: () => void, delayMs: number) => {
+      const timeoutId = window.setTimeout(callback, delayMs);
+      scheduledTimeouts.push(timeoutId);
+    };
+
+    const canHandleVoiceEvents = () =>
+      !isCleaningUp && isVoiceReadyRef.current();
 
     const scheduleRemoteAudioConsume = (remoteId: number) => {
-      const rtpCapabilities = getRtpCapabilitiesRef.current();
-      const retryDelaysMs = [0, 400, 1200, 3000, 6000];
-
-      retryDelaysMs.forEach((delayMs) => {
-        window.setTimeout(() => {
-          if (isCleaningUp) return;
+      REMOTE_AUDIO_CONSUME_DELAYS_MS.forEach((delayMs) => {
+        schedule(() => {
+          if (!canHandleVoiceEvents()) return;
 
           void consumeRef.current(
             remoteId,
             StreamKind.AUDIO,
-            rtpCapabilities
+            getRtpCapabilitiesRef.current()
           );
         }, delayMs);
       });
     };
 
     const ensureRemoteUserMediaConsumed = (remoteId: number) => {
+      if (!canHandleVoiceEvents()) return;
+
       const rtpCapabilities = getRtpCapabilitiesRef.current();
 
       scheduleRemoteAudioConsume(remoteId);
@@ -97,6 +122,8 @@ const useVoiceEvents = ({
     };
 
     const ensureRemoteScreenShareConsumed = (remoteId: number) => {
+      if (!canHandleVoiceEvents()) return;
+
       const rtpCapabilities = getRtpCapabilitiesRef.current();
 
       void consumeRef.current(remoteId, StreamKind.SCREEN, rtpCapabilities);
@@ -111,7 +138,9 @@ const useVoiceEvents = ({
       undefined,
       {
         onData: ({ remoteId, kind, channelId }) => {
-          if (currentVoiceChannelId !== channelId || isCleaningUp) return;
+          if (currentVoiceChannelId !== channelId || !canHandleVoiceEvents()) {
+            return;
+          }
 
           if (remoteId === ownUserId) {
             logVoice('Ignoring own producer event', {
@@ -177,6 +206,8 @@ const useVoiceEvents = ({
           });
 
           try {
+            releaseRemoteConsumerRef.current(remoteId, kind);
+
             if (
               kind === StreamKind.EXTERNAL_VIDEO ||
               kind === StreamKind.EXTERNAL_AUDIO
@@ -207,6 +238,7 @@ const useVoiceEvents = ({
         logVoice('User leave event received', { userId, channelId });
 
         try {
+          releaseRemoteConsumersForUserRef.current(userId);
           clearRemoteUserStreamsForUserRef.current(userId);
         } catch (error) {
           logVoice('Error clearing remote streams for user', { error });
@@ -219,7 +251,10 @@ const useVoiceEvents = ({
 
     const onVoiceUserJoinSub = trpc.voice.onJoin.subscribe(undefined, {
       onData: ({ channelId, userId }) => {
-        if (currentVoiceChannelId !== channelId || isCleaningUp) return;
+        if (currentVoiceChannelId !== channelId || !canHandleVoiceEvents()) {
+          return;
+        }
+
         if (userId === ownUserId) return;
 
         logVoice('User join event received, ensuring remote media consumers', {
@@ -238,7 +273,10 @@ const useVoiceEvents = ({
       undefined,
       {
         onData: ({ channelId, userId, state }) => {
-          if (currentVoiceChannelId !== channelId || isCleaningUp) return;
+          if (currentVoiceChannelId !== channelId || !canHandleVoiceEvents()) {
+            return;
+          }
+
           if (userId === ownUserId) return;
 
           if (state.sharingScreen) {
@@ -267,6 +305,14 @@ const useVoiceEvents = ({
           });
 
           try {
+            releaseRemoteConsumerRef.current(
+              streamId,
+              StreamKind.EXTERNAL_AUDIO
+            );
+            releaseRemoteConsumerRef.current(
+              streamId,
+              StreamKind.EXTERNAL_VIDEO
+            );
             removeExternalStreamRef.current(streamId);
           } catch (error) {
             logVoice('Error removing external stream', {
@@ -285,6 +331,10 @@ const useVoiceEvents = ({
       logVoice('Cleaning up voice events');
 
       isCleaningUp = true;
+
+      scheduledTimeouts.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId);
+      });
 
       onVoiceNewProducerSub.unsubscribe();
       onVoiceProducerClosedSub.unsubscribe();

@@ -30,6 +30,7 @@ import { useOwnVoiceTrayActivity } from './hooks/use-own-voice-tray-activity';
 import { useVoiceConsumerSync } from './hooks/use-voice-consumer-sync';
 import { getTRPCClient } from '@/lib/trpc';
 import { NoiseSuppression, VideoCodec, type TStreamQuality } from '@/types';
+import type { TRemoteUserStreamKinds } from '@/types';
 import {
   DEFAULT_BITRATE,
   StreamKind,
@@ -208,6 +209,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
     ConnectionStatus.DISCONNECTED
   );
+  const connectionStatusRef = useRef(connectionStatus);
+  connectionStatusRef.current = connectionStatus;
   const routerRtpCapabilities = useRef<RtpCapabilities | null>(null);
   /** Закрытие AudioContext + IPC при демке со звуком из ApplicationLoopback.exe (stdout PCM). */
   const screenShareApplicationLoopbackDisposeRef = useRef<
@@ -387,6 +390,30 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     remoteUserStreams
   } = useRemoteStreams();
 
+  const remoteUserStreamsRef = useRef(remoteUserStreams);
+  remoteUserStreamsRef.current = remoteUserStreams;
+
+  const hasRemoteUserStream = useCallback(
+    (userId: number, kind: TRemoteUserStreamKinds) => {
+      const stream = remoteUserStreamsRef.current[userId]?.[kind];
+
+      if (!stream) return false;
+
+      const tracks =
+        kind === StreamKind.AUDIO || kind === StreamKind.SCREEN_AUDIO
+          ? stream.getAudioTracks()
+          : stream.getVideoTracks();
+
+      return tracks.some((track) => track.readyState === 'live');
+    },
+    []
+  );
+
+  const isVoiceReady = useCallback(
+    () => connectionStatusRef.current === ConnectionStatus.CONNECTED,
+    []
+  );
+
   const {
     localAudioProducer,
     localVideoProducer,
@@ -410,6 +437,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     consume,
     consumeExistingProducers,
     syncMissingProducers,
+    releaseRemoteConsumer,
+    releaseRemoteConsumersForUser,
     cleanupTransports,
     getConsumerCodec
   } = useTransports({
@@ -420,7 +449,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     setRemoteConsumerType,
     setRemoteStreamQualityLayers,
     clearRemoteConsumerMetadata,
-    getStreamQuality
+    getStreamQuality,
+    hasRemoteUserStream
   });
 
   const {
@@ -1286,6 +1316,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
 
   useVoiceEvents({
     consume,
+    releaseRemoteConsumer,
+    releaseRemoteConsumersForUser,
     removeRemoteUserStream,
     removeExternalStreamTrack,
     removeExternalStream,
@@ -1293,7 +1325,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     getRtpCapabilities: () =>
       rtpCapabilitiesRef.current ??
       deviceRtpCapabilities.current ??
-      routerRtpCapabilities.current!
+      routerRtpCapabilities.current!,
+    isVoiceReady
   });
 
   useVoiceConsumerSync({

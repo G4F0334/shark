@@ -1,5 +1,6 @@
 import { useVoiceUsersByChannelId } from '@/features/server/hooks';
-import { memo } from 'react';
+import { useOwnUserId } from '@/features/server/users/hooks';
+import { memo, useMemo } from 'react';
 import { useVoiceRefs } from './hooks/use-voice-refs';
 
 type TVoiceUserAudioStreamProps = {
@@ -27,10 +28,16 @@ type TVoiceAudioStreamsProps = {
 
 const VoiceAudioStreams = memo(({ channelId }: TVoiceAudioStreamsProps) => {
   const voiceUsers = useVoiceUsersByChannelId(channelId);
+  const ownUserId = useOwnUserId();
+
+  const remoteVoiceUsers = useMemo(
+    () => voiceUsers.filter((voiceUser) => voiceUser.id !== ownUserId),
+    [voiceUsers, ownUserId]
+  );
 
   return (
     <>
-      {voiceUsers.map((voiceUser) => (
+      {remoteVoiceUsers.map((voiceUser) => (
         <VoiceUserAudioStream key={voiceUser.id} userId={voiceUser.id} />
       ))}
     </>

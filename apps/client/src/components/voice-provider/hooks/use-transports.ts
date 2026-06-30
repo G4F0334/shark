@@ -66,6 +66,10 @@ type TUseTransportParams = {
   ) => void;
   clearRemoteConsumerMetadata: () => void;
   getStreamQuality: (remoteId: number, kind: StreamKind) => TStreamQuality;
+  hasRemoteUserStream?: (
+    userId: number,
+    kind: TRemoteUserStreamKinds
+  ) => boolean;
 };
 
 const useTransports = ({
@@ -76,7 +80,8 @@ const useTransports = ({
   setRemoteConsumerType,
   setRemoteStreamQualityLayers,
   clearRemoteConsumerMetadata,
-  getStreamQuality
+  getStreamQuality,
+  hasRemoteUserStream
 }: TUseTransportParams) => {
   const producerTransport = useRef<Transport<AppData> | undefined>(undefined);
   const consumerTransport = useRef<Transport<AppData> | undefined>(undefined);
@@ -87,6 +92,43 @@ const useTransports = ({
   }>({});
   const consumerCodecs = useRef<Map<string, string>>(new Map());
   const consumeOperationsInProgress = useRef<Set<string>>(new Set());
+  const hasRemoteUserStreamRef = useRef(hasRemoteUserStream);
+  hasRemoteUserStreamRef.current = hasRemoteUserStream;
+
+  const releaseRemoteConsumer = useCallback(
+    (remoteId: number, kind: StreamKind) => {
+      const consumer = consumers.current[remoteId]?.[kind];
+
+      if (consumer && !consumer.closed) {
+        consumer.close();
+      }
+
+      if (consumers.current[remoteId]) {
+        delete consumers.current[remoteId][kind];
+
+        if (Object.keys(consumers.current[remoteId]).length === 0) {
+          delete consumers.current[remoteId];
+        }
+      }
+
+      consumeOperationsInProgress.current.delete(`${remoteId}-${kind}`);
+      consumerCodecs.current.delete(`${remoteId}-${kind}`);
+    },
+    []
+  );
+
+  const releaseRemoteConsumersForUser = useCallback(
+    (userId: number) => {
+      const userConsumers = consumers.current[userId];
+
+      if (!userConsumers) return;
+
+      Object.keys(userConsumers).forEach((kind) => {
+        releaseRemoteConsumer(userId, kind as StreamKind);
+      });
+    },
+    [releaseRemoteConsumer]
+  );
 
   const createProducerTransport = useCallback(async (device: Device) => {
     logVoice('Creating producer transport', { device });
@@ -262,16 +304,38 @@ const useTransports = ({
       const operationKey = `${remoteId}-${kind}`;
       const existingConsumer = consumers.current[remoteId]?.[kind];
 
-      if (
-        existingConsumer &&
-        !existingConsumer.closed &&
-        existingConsumer.track?.readyState === 'live'
-      ) {
-        logVoice('Live consumer already exists, skipping consume', {
-          remoteId,
-          kind
-        });
-        return;
+      if (existingConsumer && !existingConsumer.closed) {
+        if (existingConsumer.track?.readyState === 'live') {
+          const hasStream = hasRemoteUserStreamRef.current;
+          const missingUiStream =
+            hasStream &&
+            kind !== StreamKind.EXTERNAL_AUDIO &&
+            kind !== StreamKind.EXTERNAL_VIDEO &&
+            !hasStream(remoteId, kind as TRemoteUserStreamKinds);
+
+          if (missingUiStream && existingConsumer.track) {
+            logVoice('Re-attaching stream from live consumer', {
+              remoteId,
+              kind
+            });
+
+            const stream = new MediaStream();
+            stream.addTrack(existingConsumer.track);
+
+            addRemoteUserStream(remoteId, stream, kind as TRemoteUserStreamKinds);
+            return;
+          }
+
+          logVoice('Live consumer already exists, skipping consume', {
+            remoteId,
+            kind
+          });
+          return;
+        }
+
+        logVoice('Closing stale consumer before consume', { remoteId, kind });
+        existingConsumer.close();
+        delete consumers.current[remoteId]?.[kind];
       }
 
       if (consumeOperationsInProgress.current.has(operationKey)) {
@@ -546,6 +610,30 @@ const useTransports = ({
     );
   }, []);
 
+  const needsRemoteConsumer = useCallback(
+    (remoteId: number, kind: StreamKind) => {
+      if (!hasActiveConsumer(remoteId, kind)) {
+        return true;
+      }
+
+      const hasStream = hasRemoteUserStreamRef.current;
+
+      if (!hasStream) {
+        return false;
+      }
+
+      if (
+        kind === StreamKind.EXTERNAL_AUDIO ||
+        kind === StreamKind.EXTERNAL_VIDEO
+      ) {
+        return false;
+      }
+
+      return !hasStream(remoteId, kind as TRemoteUserStreamKinds);
+    },
+    [hasActiveConsumer]
+  );
+
   const syncMissingProducers = useCallback(
     async (rtpCapabilities: RtpCapabilities) => {
       if (!consumerTransport.current) return;
@@ -562,7 +650,7 @@ const useTransports = ({
         } = await trpc.voice.getProducers.query();
 
         const ensure = (remoteId: number, kind: StreamKind) => {
-          if (hasActiveConsumer(remoteId, kind)) return;
+          if (!needsRemoteConsumer(remoteId, kind)) return;
 
           logVoice('Syncing missing producer consumer', { remoteId, kind });
           void consume(remoteId, kind, rtpCapabilities);
@@ -592,7 +680,7 @@ const useTransports = ({
         logVoice('Error syncing missing producers', { error });
       }
     },
-    [consume, hasActiveConsumer]
+    [consume, needsRemoteConsumer]
   );
 
   const getConsumerCodec = useCallback(
@@ -644,6 +732,8 @@ const useTransports = ({
     consume,
     consumeExistingProducers,
     syncMissingProducers,
+    releaseRemoteConsumer,
+    releaseRemoteConsumersForUser,
     cleanupTransports,
     getConsumerCodec
   };
