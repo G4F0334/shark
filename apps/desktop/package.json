@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "productName": "Sharkord",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "Sharkord desktop shell",
   "author": "Sharkord",
   "type": "module",

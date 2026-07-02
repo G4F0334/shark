@@ -12,7 +12,7 @@ const SERVER_VERSION =
 const DESKTOP_VERSION =
   typeof process.env.SHARKORD_DESKTOP_VERSION !== 'undefined'
     ? process.env.SHARKORD_DESKTOP_VERSION
-    : '0.0.25';
+    : '0.0.26';
 
 const DESKTOP_DOWNLOAD_URL = process.env.SHARKORD_DESKTOP_DOWNLOAD_URL || 'http://ping-net.ddns.net:4896/win-unpacked.7z';
 
