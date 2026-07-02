@@ -10,7 +10,9 @@ function getTargetUrl() {
     return 'http://localhost:5173';
   }
 
-  return 'https://sharkapi.ping-net.kz/';
+  return 'https://gentleman-minimal-furniture-camcorder.trycloudflare.com/';
+
+  // return 'https://sharkapi.ping-net.kz/';
 }
 
 /**
