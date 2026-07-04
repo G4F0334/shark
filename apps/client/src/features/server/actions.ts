@@ -1,7 +1,13 @@
 import { Dialog } from '@/components/dialogs/dialogs';
 import { logDebug } from '@/helpers/browser-logger';
 import { getHostFromServer } from '@/helpers/get-file-url';
-import { cleanup, connectToTRPC, getTRPCClient, retryConnection } from '@/lib/trpc';
+import {
+  cleanup,
+  connectToTRPC,
+  getTRPCClient,
+  retryConnection
+} from '@/lib/trpc';
+import { notifyVoiceSignalingRefresh } from '@/lib/voice-signaling-refresh';
 import type { TMessageJumpToTarget } from '@/types';
 import { type TPublicServerSettings, type TServerInfo } from '@sharkord/shared';
 import type { RtpCapabilities } from 'mediasoup-client/types';
@@ -93,6 +99,7 @@ const runPendingVoiceReconnect = async (): Promise<void> => {
   if (!channelId) return;
 
   await voiceReconnectHandler(rtpCapabilities, channelId);
+  notifyVoiceSignalingRefresh();
 };
 
 export const retryServerConnection = async (): Promise<void> => {

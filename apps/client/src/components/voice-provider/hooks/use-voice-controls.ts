@@ -3,8 +3,8 @@ import { playSound } from '@/features/server/sounds/actions';
 import { SoundType } from '@/features/server/types';
 import { updateOwnVoiceState } from '@/features/server/voice/actions';
 import { useOwnVoiceState } from '@/features/server/voice/hooks';
-import { getTRPCClient } from '@/lib/trpc';
 import { isDisplayMediaUserCancel } from '@/helpers/get-display-media-support';
+import { getTRPCClient } from '@/lib/trpc';
 import { getTrpcError } from '@sharkord/shared';
 import { useCallback, useRef } from 'react';
 import { toast } from 'sonner';
@@ -285,7 +285,7 @@ const useVoiceControls = ({
     stopScreenShareStream
   ]);
 
-  (globalThis as any).toggleMicG = toggleMic;
+  window.toggleMicG = toggleMic;
 
   return {
     toggleMic,

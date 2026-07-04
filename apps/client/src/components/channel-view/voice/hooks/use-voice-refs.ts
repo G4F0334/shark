@@ -128,14 +128,12 @@ const useVoiceRefs = (
     const audioTracks = audioStream.getAudioTracks();
 
     audioTracks.forEach((track) => {
-      track.onunmute = playVoiceAudio;
-      track.onstart = playVoiceAudio;
+      track.addEventListener('unmute', playVoiceAudio);
     });
 
     return () => {
       audioTracks.forEach((track) => {
-        track.onunmute = null;
-        track.onstart = null;
+        track.removeEventListener('unmute', playVoiceAudio);
       });
     };
   }, [
@@ -169,14 +167,12 @@ const useVoiceRefs = (
     const audioTracks = screenShareAudioStream.getAudioTracks();
 
     audioTracks.forEach((track) => {
-      track.onunmute = playScreenShareAudio;
-      track.onstart = playScreenShareAudio;
+      track.addEventListener('unmute', playScreenShareAudio);
     });
 
     return () => {
       audioTracks.forEach((track) => {
-        track.onunmute = null;
-        track.onstart = null;
+        track.removeEventListener('unmute', playScreenShareAudio);
       });
     };
   }, [

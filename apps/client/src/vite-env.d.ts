@@ -7,6 +7,7 @@ declare global {
     useToken: (token: string) => Promise<void>;
     openSoundsModal?: () => void;
     printVoiceStats?: () => void;
+    toggleMicG?: () => Promise<void>;
     RunHotkey?: (bindId: string) => void | Promise<void>;
     DEBUG?: boolean;
 
@@ -35,7 +36,24 @@ declare global {
       ) => Promise<{ ok: boolean; error?: string }>;
       voiceActivity?: (status: string) => Promise<void>;
       reloadHotkeys?: (keys: string) => Promise<{ ok: boolean }>;
-      changeHotkey?: (newHotkey: any) => Promise<void>;
+      changeHotkey?: (newHotkey: unknown) => Promise<void>;
+      displayMediaPicker?: {
+        listSources: () => Promise<
+          {
+            id: string;
+            name: string;
+            display_id: string;
+            isScreen: boolean;
+            thumb: string;
+          }[]
+        >;
+        submit: (payload: { sourceId: string }) => Promise<{
+          ok: boolean;
+          error?: string;
+        }>;
+        cancel: () => Promise<{ ok: boolean }>;
+        reset: () => Promise<{ ok: boolean }>;
+      };
       applicationLoopbackStop?: () => Promise<{ ok: boolean }>;
       applicationLoopbackPcmConsumerReady?: () => Promise<{ ok: boolean }>;
       consumeDisplayMediaAudioRoute?: () => Promise<{

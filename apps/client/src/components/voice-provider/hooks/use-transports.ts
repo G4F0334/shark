@@ -66,6 +66,7 @@ type TUseTransportParams = {
   ) => void;
   clearRemoteConsumerMetadata: () => void;
   getStreamQuality: (remoteId: number, kind: StreamKind) => TStreamQuality;
+  onConsumerTransportFailed?: () => void;
   hasRemoteUserStream?: (
     userId: number,
     kind: TRemoteUserStreamKinds
@@ -81,6 +82,7 @@ const useTransports = ({
   setRemoteStreamQualityLayers,
   clearRemoteConsumerMetadata,
   getStreamQuality,
+  onConsumerTransportFailed,
   hasRemoteUserStream
 }: TUseTransportParams) => {
   const producerTransport = useRef<Transport<AppData> | undefined>(undefined);
@@ -221,64 +223,68 @@ const useTransports = ({
     }
   }, []);
 
-  const createConsumerTransport = useCallback(async (device: Device) => {
-    logVoice('Creating consumer transport', { device });
+  const createConsumerTransport = useCallback(
+    async (device: Device) => {
+      logVoice('Creating consumer transport', { device });
 
-    const trpc = getTRPCClient();
+      const trpc = getTRPCClient();
 
-    try {
-      const params = await trpc.voice.createConsumerTransport.mutate();
+      try {
+        const params = await trpc.voice.createConsumerTransport.mutate();
 
-      logVoice('Got consumer transport parameters', { params });
+        logVoice('Got consumer transport parameters', { params });
 
-      consumerTransport.current = device.createRecvTransport(params);
+        consumerTransport.current = device.createRecvTransport(params);
 
-      consumerTransport.current.on(
-        'connect',
-        async ({ dtlsParameters }, callback, errback) => {
-          logVoice('Consumer transport connected', { dtlsParameters });
+        consumerTransport.current.on(
+          'connect',
+          async ({ dtlsParameters }, callback, errback) => {
+            logVoice('Consumer transport connected', { dtlsParameters });
 
-          try {
-            await trpc.voice.connectConsumerTransport.mutate({
-              dtlsParameters
-            });
+            try {
+              await trpc.voice.connectConsumerTransport.mutate({
+                dtlsParameters
+              });
 
-            callback();
-          } catch (error) {
-            errback(error as Error);
-            logVoice('Consumer transport connect error', { error });
+              callback();
+            } catch (error) {
+              errback(error as Error);
+              logVoice('Consumer transport connect error', { error });
+            }
           }
-        }
-      );
+        );
 
-      consumerTransport.current.on('connectionstatechange', (state) => {
-        logVoice('Consumer transport connection state changed', { state });
+        consumerTransport.current.on('connectionstatechange', (state) => {
+          logVoice('Consumer transport connection state changed', { state });
 
-        if (state === 'failed') {
-          logVoice(`Consumer transport ${state}, attempting cleanup`);
+          if (state === 'failed') {
+            logVoice(`Consumer transport ${state}, attempting cleanup`);
 
-          Object.values(consumers.current).forEach((userConsumers) => {
-            Object.values(userConsumers).forEach((consumer) => {
-              consumer.close();
+            Object.values(consumers.current).forEach((userConsumers) => {
+              Object.values(userConsumers).forEach((consumer) => {
+                consumer.close();
+              });
             });
-          });
-          consumers.current = {};
+            consumers.current = {};
 
-          consumerTransport.current?.close();
-          consumerTransport.current = undefined;
-        } else if (state === 'closed') {
-          logVoice('Consumer transport closed');
-          consumerTransport.current = undefined;
-        }
-      });
+            consumerTransport.current?.close();
+            consumerTransport.current = undefined;
+            onConsumerTransportFailed?.();
+          } else if (state === 'closed') {
+            logVoice('Consumer transport closed');
+            consumerTransport.current = undefined;
+          }
+        });
 
-      consumerTransport.current.on('icecandidateerror', (error) => {
-        logVoice('Consumer transport ICE candidate error', { error });
-      });
-    } catch (error) {
-      logVoice('Failed to create consumer transport', { error });
-    }
-  }, []);
+        consumerTransport.current.on('icecandidateerror', (error) => {
+          logVoice('Consumer transport ICE candidate error', { error });
+        });
+      } catch (error) {
+        logVoice('Failed to create consumer transport', { error });
+      }
+    },
+    [onConsumerTransportFailed]
+  );
 
   const consume = useCallback(
     async (
@@ -322,7 +328,11 @@ const useTransports = ({
             const stream = new MediaStream();
             stream.addTrack(existingConsumer.track);
 
-            addRemoteUserStream(remoteId, stream, kind as TRemoteUserStreamKinds);
+            addRemoteUserStream(
+              remoteId,
+              stream,
+              kind as TRemoteUserStreamKinds
+            );
             return;
           }
 
@@ -600,15 +610,16 @@ const useTransports = ({
     [consume]
   );
 
-  const hasActiveConsumer = useCallback((remoteId: number, kind: StreamKind) => {
-    const consumer = consumers.current[remoteId]?.[kind];
+  const hasActiveConsumer = useCallback(
+    (remoteId: number, kind: StreamKind) => {
+      const consumer = consumers.current[remoteId]?.[kind];
 
-    return (
-      !!consumer &&
-      !consumer.closed &&
-      consumer.track?.readyState === 'live'
-    );
-  }, []);
+      return (
+        !!consumer && !consumer.closed && consumer.track?.readyState === 'live'
+      );
+    },
+    []
+  );
 
   const needsRemoteConsumer = useCallback(
     (remoteId: number, kind: StreamKind) => {

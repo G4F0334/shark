@@ -2,10 +2,14 @@ import { useCurrentVoiceChannelId } from '@/features/server/channels/hooks';
 import { useOwnUserId } from '@/features/server/users/hooks';
 import { logVoice } from '@/helpers/browser-logger';
 import { getTRPCClient } from '@/lib/trpc';
+import {
+  getVoiceSignalingRefreshVersion,
+  subscribeVoiceSignalingRefresh
+} from '@/lib/voice-signaling-refresh';
 import type { TRemoteUserStreamKinds } from '@/types';
 import { StreamKind } from '@sharkord/shared';
 import type { RtpCapabilities } from 'mediasoup-client/types';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type TEvents = {
   consume: (
@@ -30,6 +34,7 @@ type TEvents = {
 };
 
 const REMOTE_AUDIO_CONSUME_DELAYS_MS = [0, 400, 1200, 3000, 6000];
+const VOICE_READY_RETRY_DELAYS_MS = [0, 250, 750, 1500, 3000, 6000, 10000];
 
 const useVoiceEvents = ({
   consume,
@@ -44,6 +49,8 @@ const useVoiceEvents = ({
 }: TEvents) => {
   const currentVoiceChannelId = useCurrentVoiceChannelId();
   const ownUserId = useOwnUserId();
+  const [voiceSignalingRefreshVersion, setVoiceSignalingRefreshVersion] =
+    useState(getVoiceSignalingRefreshVersion);
 
   const consumeRef = useRef(consume);
   consumeRef.current = consume;
@@ -51,7 +58,9 @@ const useVoiceEvents = ({
   const releaseRemoteConsumerRef = useRef(releaseRemoteConsumer);
   releaseRemoteConsumerRef.current = releaseRemoteConsumer;
 
-  const releaseRemoteConsumersForUserRef = useRef(releaseRemoteConsumersForUser);
+  const releaseRemoteConsumersForUserRef = useRef(
+    releaseRemoteConsumersForUser
+  );
   releaseRemoteConsumersForUserRef.current = releaseRemoteConsumersForUser;
 
   const removeRemoteUserStreamRef = useRef(removeRemoteUserStream);
@@ -63,7 +72,9 @@ const useVoiceEvents = ({
   const removeExternalStreamRef = useRef(removeExternalStream);
   removeExternalStreamRef.current = removeExternalStream;
 
-  const clearRemoteUserStreamsForUserRef = useRef(clearRemoteUserStreamsForUser);
+  const clearRemoteUserStreamsForUserRef = useRef(
+    clearRemoteUserStreamsForUser
+  );
   clearRemoteUserStreamsForUserRef.current = clearRemoteUserStreamsForUser;
 
   const getRtpCapabilitiesRef = useRef(getRtpCapabilities);
@@ -71,6 +82,10 @@ const useVoiceEvents = ({
 
   const isVoiceReadyRef = useRef(isVoiceReady);
   isVoiceReadyRef.current = isVoiceReady;
+
+  useEffect(() => {
+    return subscribeVoiceSignalingRefresh(setVoiceSignalingRefreshVersion);
+  }, []);
 
   useEffect(() => {
     if (!currentVoiceChannelId) {
@@ -81,7 +96,7 @@ const useVoiceEvents = ({
     const trpc = getTRPCClient();
 
     let isCleaningUp = false;
-    const scheduledTimeouts: ReturnType<typeof setTimeout>[] = [];
+    const scheduledTimeouts: number[] = [];
 
     const schedule = (callback: () => void, delayMs: number) => {
       const timeoutId = window.setTimeout(callback, delayMs);
@@ -90,6 +105,16 @@ const useVoiceEvents = ({
 
     const canHandleVoiceEvents = () =>
       !isCleaningUp && isVoiceReadyRef.current();
+
+    const scheduleWhenVoiceReady = (callback: () => void) => {
+      VOICE_READY_RETRY_DELAYS_MS.forEach((delayMs) => {
+        schedule(() => {
+          if (!canHandleVoiceEvents()) return;
+
+          callback();
+        }, delayMs);
+      });
+    };
 
     const scheduleRemoteAudioConsume = (remoteId: number) => {
       REMOTE_AUDIO_CONSUME_DELAYS_MS.forEach((delayMs) => {
@@ -138,9 +163,7 @@ const useVoiceEvents = ({
       undefined,
       {
         onData: ({ remoteId, kind, channelId }) => {
-          if (currentVoiceChannelId !== channelId || !canHandleVoiceEvents()) {
-            return;
-          }
+          if (currentVoiceChannelId !== channelId || isCleaningUp) return;
 
           if (remoteId === ownUserId) {
             logVoice('Ignoring own producer event', {
@@ -164,19 +187,26 @@ const useVoiceEvents = ({
               kind === StreamKind.SCREEN ||
               kind === StreamKind.SCREEN_AUDIO
             ) {
-              ensureRemoteScreenShareConsumed(remoteId);
+              scheduleWhenVoiceReady(() =>
+                ensureRemoteScreenShareConsumed(remoteId)
+              );
               return;
             }
 
             if (kind === StreamKind.AUDIO) {
-              scheduleRemoteAudioConsume(remoteId);
+              scheduleWhenVoiceReady(() =>
+                scheduleRemoteAudioConsume(remoteId)
+              );
               return;
             }
 
-            void consumeRef.current(
-              remoteId,
-              kind,
-              getRtpCapabilitiesRef.current()
+            scheduleWhenVoiceReady(
+              () =>
+                void consumeRef.current(
+                  remoteId,
+                  kind,
+                  getRtpCapabilitiesRef.current()
+                )
             );
           } catch (error) {
             logVoice('Error consuming new producer', {
@@ -251,9 +281,7 @@ const useVoiceEvents = ({
 
     const onVoiceUserJoinSub = trpc.voice.onJoin.subscribe(undefined, {
       onData: ({ channelId, userId }) => {
-        if (currentVoiceChannelId !== channelId || !canHandleVoiceEvents()) {
-          return;
-        }
+        if (currentVoiceChannelId !== channelId || isCleaningUp) return;
 
         if (userId === ownUserId) return;
 
@@ -262,7 +290,7 @@ const useVoiceEvents = ({
           channelId
         });
 
-        ensureRemoteUserMediaConsumed(userId);
+        scheduleWhenVoiceReady(() => ensureRemoteUserMediaConsumed(userId));
       },
       onError: (error) => {
         logVoice('onVoiceUserJoin subscription error', { error });
@@ -273,9 +301,7 @@ const useVoiceEvents = ({
       undefined,
       {
         onData: ({ channelId, userId, state }) => {
-          if (currentVoiceChannelId !== channelId || !canHandleVoiceEvents()) {
-            return;
-          }
+          if (currentVoiceChannelId !== channelId || isCleaningUp) return;
 
           if (userId === ownUserId) return;
 
@@ -285,7 +311,9 @@ const useVoiceEvents = ({
               { userId, channelId }
             );
 
-            ensureRemoteScreenShareConsumed(userId);
+            scheduleWhenVoiceReady(() =>
+              ensureRemoteScreenShareConsumed(userId)
+            );
           }
         },
         onError: (error) => {
@@ -343,7 +371,7 @@ const useVoiceEvents = ({
       onVoiceUserUpdateStateSub.unsubscribe();
       onVoiceRemoveExternalStreamSub.unsubscribe();
     };
-  }, [currentVoiceChannelId, ownUserId]);
+  }, [currentVoiceChannelId, ownUserId, voiceSignalingRefreshVersion]);
 };
 
 export { useVoiceEvents };

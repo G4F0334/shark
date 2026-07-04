@@ -26,11 +26,9 @@ import {
 import { getResWidthHeight } from '@/helpers/get-res-with-height';
 import { pickScreenShareH264Codec } from '@/helpers/pick-screen-share-h264-codec';
 import { useScreenShareSupport } from '@/hooks/use-screen-share-support';
-import { useOwnVoiceTrayActivity } from './hooks/use-own-voice-tray-activity';
-import { useVoiceConsumerSync } from './hooks/use-voice-consumer-sync';
 import { getTRPCClient } from '@/lib/trpc';
-import { NoiseSuppression, VideoCodec, type TStreamQuality } from '@/types';
 import type { TRemoteUserStreamKinds } from '@/types';
+import { NoiseSuppression, VideoCodec, type TStreamQuality } from '@/types';
 import {
   DEFAULT_BITRATE,
   StreamKind,
@@ -73,12 +71,14 @@ import {
   type TStreamQualitySettings
 } from './helpers';
 import { useLocalStreams } from './hooks/use-local-streams';
+import { useOwnVoiceTrayActivity } from './hooks/use-own-voice-tray-activity';
 import { useRemoteStreams } from './hooks/use-remote-streams';
 import {
   useTransportStats,
   type TransportStatsData
 } from './hooks/use-transport-stats';
 import { useTransports } from './hooks/use-transports';
+import { useVoiceConsumerSync } from './hooks/use-voice-consumer-sync';
 import { useVoiceControls } from './hooks/use-voice-controls';
 import { useVoiceEvents } from './hooks/use-voice-events';
 import { SIMULCAST_WEBCAM_MAX_BITRATE } from './statics';
@@ -216,6 +216,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
   const screenShareApplicationLoopbackDisposeRef = useRef<
     (() => Promise<void>) | undefined
   >(undefined);
+  const recoverVoiceSessionRef = useRef<() => void>(() => undefined);
   const deviceRtpCapabilities = useRef<RtpCapabilities | null>(null);
   const rtpCapabilitiesRef = useRef<RtpCapabilities>(
     routerRtpCapabilities.current!
@@ -426,8 +427,13 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     setLocalAudioStream,
     setLocalVideoStream,
     setLocalScreenShare,
+    setLocalScreenShareAudio,
     clearLocalStreams
   } = useLocalStreams();
+
+  const handleConsumerTransportFailed = useCallback(() => {
+    recoverVoiceSessionRef.current();
+  }, []);
 
   const {
     producerTransport,
@@ -450,6 +456,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     setRemoteStreamQualityLayers,
     clearRemoteConsumerMetadata,
     getStreamQuality,
+    onConsumerTransportFailed: handleConsumerTransportFailed,
     hasRemoteUserStream
   });
 
@@ -882,16 +889,29 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
       localScreenShareStream.removeTrack(track);
     });
 
+    localScreenShareAudioStream?.getTracks().forEach((track) => {
+      logVoice('Stopping screen share audio track', { track });
+
+      track.stop();
+      localScreenShareAudioStream.removeTrack(track);
+    });
+
     localScreenShareProducer.current?.close();
     localScreenShareProducer.current = undefined;
+    localScreenShareAudioProducer.current?.close();
+    localScreenShareAudioProducer.current = undefined;
 
     setScreenShareProducer(null);
     setLocalScreenShare(undefined);
+    setLocalScreenShareAudio(undefined);
   }, [
     disposeScreenShareApplicationLoopbackAudio,
     localScreenShareStream,
+    localScreenShareAudioStream,
     setLocalScreenShare,
+    setLocalScreenShareAudio,
     localScreenShareProducer,
+    localScreenShareAudioProducer,
     setScreenShareProducer
   ]);
 
@@ -974,8 +994,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
           });
           throw new Error('ApplicationLoopback PCM bridge unavailable');
         }
-        const { track, dispose } =
-          await createApplicationLoopbackPcmAudioTrack({
+        const { track, dispose } = await createApplicationLoopbackPcmAudioTrack(
+          {
             subscribe: sub,
             signalConsumerReady: async () => {
               const result = await pcmReady();
@@ -983,7 +1003,8 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
                 logVoice('ApplicationLoopback PCM consumer ready rejected');
               }
             }
-          });
+          }
+        );
         screenShareApplicationLoopbackDisposeRef.current = dispose;
         audioTrack = track;
         stream.addTrack(track);
@@ -1122,6 +1143,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
 
         if (audioTrack) {
           logVoice('Obtained audio track', { audioTrack });
+          setLocalScreenShareAudio(new MediaStream([audioTrack]));
 
           localScreenShareAudioProducer.current =
             await producerTransport.current?.produce({
@@ -1136,9 +1158,24 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
               appData: { kind: StreamKind.SCREEN_AUDIO }
             });
 
+          localScreenShareAudioProducer.current?.on('@close', async () => {
+            logVoice('Screen share audio producer closed');
+
+            const trpc = getTRPCClient();
+
+            try {
+              await trpc.voice.closeProducer.mutate({
+                kind: StreamKind.SCREEN_AUDIO
+              });
+            } catch (error) {
+              logVoice('Error closing screen share audio producer', { error });
+            }
+          });
+
           audioTrack.onended = () => {
             localScreenShareAudioProducer.current?.close();
             localScreenShareAudioProducer.current = undefined;
+            setLocalScreenShareAudio(undefined);
           };
         }
 
@@ -1160,6 +1197,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
   }, [
     disposeScreenShareApplicationLoopbackAudio,
     setLocalScreenShare,
+    setLocalScreenShareAudio,
     localScreenShareProducer,
     localScreenShareAudioProducer,
     producerTransport,
@@ -1273,6 +1311,31 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     ]
   );
 
+  useEffect(() => {
+    recoverVoiceSessionRef.current = () => {
+      const channelId = currentVoiceChannelId;
+      const rtpCapabilities = routerRtpCapabilities.current;
+
+      setConnectionStatus(ConnectionStatus.FAILED);
+
+      if (!channelId || !rtpCapabilities) {
+        logVoice(
+          'Cannot recover voice session without channel or RTP capabilities'
+        );
+        return;
+      }
+
+      window.setTimeout(() => {
+        if (connectionStatusRef.current === ConnectionStatus.CONNECTING) return;
+
+        logVoice('Recovering voice session after consumer transport failure');
+        void init(rtpCapabilities, channelId).catch((error) => {
+          logVoice('Failed to recover voice session', { error });
+        });
+      }, 500);
+    };
+  }, [currentVoiceChannelId, init]);
+
   const { toggleMic, toggleSound, toggleWebcam, toggleScreenShare } =
     useVoiceControls({
       startMicStream,
@@ -1306,13 +1369,19 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
 
       connectionStatus: connectionStatus,
       toggleMic: ownVoiceState.micMuted,
-      toggleSound: ownVoiceState.soundMuted,
+      toggleSound: ownVoiceState.soundMuted
     });
 
     return () => {
       clearVoiceControlsBridge();
     };
-  }, [setMicMutedForBridge, setSoundMutedForBridge]);
+  }, [
+    connectionStatus,
+    ownVoiceState.micMuted,
+    ownVoiceState.soundMuted,
+    setMicMutedForBridge,
+    setSoundMutedForBridge
+  ]);
 
   useVoiceEvents({
     consume,

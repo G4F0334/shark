@@ -29,7 +29,6 @@ const useAudioLevel = (audioStream: MediaStream | undefined) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
   const ownVoiceUser = useOwnVoiceUser();
 
   useEffect(() => {
@@ -88,10 +87,6 @@ const useAudioLevel = (audioStream: MediaStream | undefined) => {
     }
 
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }

@@ -44,7 +44,10 @@ const produceRoute = protectedProcedure
         ctx.currentVoiceChannelId,
         ChannelPermission.WEBCAM
       );
-    } else if (input.kind === StreamKind.SCREEN) {
+    } else if (
+      input.kind === StreamKind.SCREEN ||
+      input.kind === StreamKind.SCREEN_AUDIO
+    ) {
       await ctx.needsChannelPermission(
         ctx.currentVoiceChannelId,
         ChannelPermission.SHARE_SCREEN
