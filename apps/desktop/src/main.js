@@ -2,14 +2,15 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyWebRtcGpuEncodingPreferences } from './apply-webrtc-gpu-switches.js';
-import { createDisplayMediaPickerController } from './display-media-picker.js';
 import { createMainWindow } from './create-main-window.js';
+import { registerDesktopUpdateIpc } from './desktop-update.js';
+import { createDisplayMediaPickerController } from './display-media-picker.js';
+import './hotkeys.js';
 import { installKnownChromiumStderrIgnore } from './ignore-known-chromium-stderr.js';
 import { installDesktopLogging } from './logger.js';
-import './hotkeys.js';
+import { installDesktopProcessPriorityBoost } from './process-priority.js';
 import { registerDesktopStorageIpc } from './storage.js';
 import { CloseState } from './trayicon.js';
-import { registerDesktopUpdateIpc } from './desktop-update.js';
 
 installKnownChromiumStderrIgnore();
 
@@ -44,6 +45,7 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     installDesktopLogging();
+    installDesktopProcessPriorityBoost();
     registerDesktopStorageIpc();
     registerDesktopUpdateIpc();
     displayPicker.registerIpc();
