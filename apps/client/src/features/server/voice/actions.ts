@@ -7,6 +7,7 @@ import {
   setLocalStorageItemBool
 } from '@/helpers/storage';
 import { getTRPCClient } from '@/lib/trpc';
+import { notifyVoiceSignalingRefresh } from '@/lib/voice-signaling-refresh';
 import {
   getTrpcError,
   type TExternalStream,
@@ -158,6 +159,12 @@ export const returnJoinVoice = async (): Promise<RtpCapabilities | undefined> =>
       state: { micMuted, soundMuted }
     });
 
+    // The store is updated before the join mutation so that the voice UI can
+    // render immediately. Refresh channel-scoped subscriptions now that the
+    // WebSocket context has the joined channel; otherwise they can remain
+    // subscribed to the pre-join (empty) channel scope.
+    notifyVoiceSignalingRefresh();
+
     return routerRtpCapabilities;
   } catch (error) {
     toast.error(getTrpcError(error, 'Failed to return join voice channel'));
@@ -192,6 +199,11 @@ export const joinVoice = async (
       channelId,
       state: { micMuted, soundMuted }
     });
+
+    // setCurrentVoiceChannelId() runs before the request so the UI can render
+    // immediately. Recreate channel-scoped subscriptions only after the
+    // WebSocket context has completed the server-side join.
+    notifyVoiceSignalingRefresh();
 
     return routerRtpCapabilities;
   } catch (error) {
