@@ -66,7 +66,7 @@ type TUseTransportParams = {
   ) => void;
   clearRemoteConsumerMetadata: () => void;
   getStreamQuality: (remoteId: number, kind: StreamKind) => TStreamQuality;
-  onConsumerTransportFailed?: () => void;
+  onTransportFailed?: () => void;
   hasRemoteUserStream?: (
     userId: number,
     kind: TRemoteUserStreamKinds
@@ -82,7 +82,7 @@ const useTransports = ({
   setRemoteStreamQualityLayers,
   clearRemoteConsumerMetadata,
   getStreamQuality,
-  onConsumerTransportFailed,
+  onTransportFailed,
   hasRemoteUserStream
 }: TUseTransportParams) => {
   const producerTransport = useRef<Transport<AppData> | undefined>(undefined);
@@ -166,8 +166,14 @@ const useTransports = ({
         logVoice('Producer transport connection state changed', { state });
 
         if (state === 'failed') {
-          logVoice(`Producer transport ${state}`);
+          // A send transport can fail while the capture preview stays alive:
+          // the browser still has the local track, but no RTP reaches people
+          // watching the screen share. Rebuild the voice session just as we
+          // already do for a failed receive transport.
+          logVoice(`Producer transport ${state}, recovering voice session`);
           producerTransport.current?.close();
+          producerTransport.current = undefined;
+          onTransportFailed?.();
         } else if (state === 'closed') {
           logVoice('Producer transport closed');
           producerTransport.current = undefined;
@@ -221,7 +227,7 @@ const useTransports = ({
     } catch (error) {
       logVoice('Error creating producer transport', { error });
     }
-  }, []);
+  }, [onTransportFailed]);
 
   const createConsumerTransport = useCallback(
     async (device: Device) => {
@@ -269,7 +275,7 @@ const useTransports = ({
 
             consumerTransport.current?.close();
             consumerTransport.current = undefined;
-            onConsumerTransportFailed?.();
+            onTransportFailed?.();
           } else if (state === 'closed') {
             logVoice('Consumer transport closed');
             consumerTransport.current = undefined;
@@ -283,7 +289,7 @@ const useTransports = ({
         logVoice('Failed to create consumer transport', { error });
       }
     },
-    [onConsumerTransportFailed]
+    [onTransportFailed]
   );
 
   const consume = useCallback(

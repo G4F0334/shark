@@ -11,11 +11,11 @@
     "start": "electron .",
     "dev": "cross-env SHARKORD_ENV=development electron .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac",
-    "dist:linux": "electron-builder --linux -c electron-builder.linux.yml",
-    "dist:linux:appimage": "electron-builder --linux -c electron-builder.linux-appimage.yml"
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux -c electron-builder.linux.yml",
+    "build:linux:appimage": "electron-builder --linux -c electron-builder.linux-appimage.yml"
   },
   "devDependencies": {
     "electron": "^34.5.8",

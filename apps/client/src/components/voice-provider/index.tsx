@@ -431,7 +431,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     clearLocalStreams
   } = useLocalStreams();
 
-  const handleConsumerTransportFailed = useCallback(() => {
+  const handleTransportFailed = useCallback(() => {
     recoverVoiceSessionRef.current();
   }, []);
 
@@ -456,7 +456,7 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
     setRemoteStreamQualityLayers,
     clearRemoteConsumerMetadata,
     getStreamQuality,
-    onConsumerTransportFailed: handleConsumerTransportFailed,
+    onTransportFailed: handleTransportFailed,
     hasRemoteUserStream
   });
 
@@ -760,6 +760,11 @@ const VoiceProvider = memo(({ children }: TVoiceProviderProps) => {
       const videoTrack = stream.getVideoTracks()[0];
 
       if (videoTrack) {
+        // Screen shares are text/UI heavy. Besides improving encoder tuning,
+        // setting the hint again after a capture source is selected helps
+        // Chromium resume a video encoder that was previously deprioritized.
+        videoTrack.contentHint = 'detail';
+
         logVoice('Obtained video track', { videoTrack });
 
         const simulcastCodec = simulcastEnabled

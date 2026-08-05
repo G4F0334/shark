@@ -12,7 +12,6 @@ import { Connect } from '@/screens/connect';
 import { Disconnected } from '@/screens/disconnected';
 import { LoadingApp } from '@/screens/loading-app';
 import { ServerView } from '@/screens/server-view';
-import { DisconnectCode } from '@sharkord/shared';
 import { memo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -45,12 +44,7 @@ const Routing = memo(() => {
       return <LoadingApp text={t('loggingInAutomatically')} />;
     }
 
-    if (
-      disconnectInfo &&
-      (!disconnectInfo.wasClean ||
-        disconnectInfo.code === DisconnectCode.KICKED ||
-        disconnectInfo.code === DisconnectCode.BANNED)
-    ) {
+    if (disconnectInfo) {
       return <Disconnected info={disconnectInfo} />;
     }
 

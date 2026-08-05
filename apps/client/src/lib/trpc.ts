@@ -8,6 +8,7 @@ import { getHostFromServer } from '@/helpers/get-file-url';
 import { getSessionStorageItem, LocalStorageKey, removeLocalStorageItem, removeSessionStorageItem, SessionStorageKey } from '@/helpers/storage';
 import { DisconnectCode, type AppRouter, type TConnectionParams } from '@sharkord/shared';
 import { TRPCClientError, createTRPCProxyClient, createWSClient, wsLink } from '@trpc/client';
+import { toast } from 'sonner';
 
 const RECONNECT_GRACE_MS = 15_000;
 
@@ -44,9 +45,6 @@ const clearReconnectTimers = () => {
   reconnectAttempts = 0;
 };
 
-const isUnexpectedDisconnect = (cause?: CloseEvent) =>
-  !cause || cause.code === DisconnectCode.UNEXPECTED || cause.code === 1006;
-
 const isServerInitiatedDisconnect = (cause: CloseEvent) =>
   cause.code === DisconnectCode.KICKED ||
   cause.code === DisconnectCode.BANNED ||
@@ -66,7 +64,14 @@ const isAuthError = (err: unknown): boolean => {
     return err.data?.code === 'UNAUTHORIZED';
   }
 
-  return false;
+  // Errors may cross package/iframe boundaries, in which case instanceof is
+  // unreliable. tRPC still preserves the error code on the payload.
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'data' in err &&
+    (err as { data?: { code?: string } }).data?.code === 'UNAUTHORIZED'
+  );
 };
 
 const tryReconnect = async (): Promise<boolean> => {
@@ -92,6 +97,7 @@ const tryReconnect = async (): Promise<boolean> => {
 
     if (isAuthError(error)) {
       clearReconnectTimers();
+      toast.error('Your session has expired. Please sign in again.');
       cleanup();
       return false;
     }
@@ -190,9 +196,11 @@ const handleWsClose = (cause: CloseEvent) => {
     return;
   }
 
-  if (isUnexpectedDisconnect(cause) || !cause.wasClean) {
-    startGracePeriod(cause);
-  }
+  // A proxy, server restart, or network adapter can close a socket cleanly
+  // (1000) even though the user did not request a disconnect. Treat every
+  // non-user, non-moderation close as recoverable so the UI and voice state
+  // cannot remain attached to a dead server session.
+  startGracePeriod(cause);
 };
 
 const initializeTRPC = (host: string) => {

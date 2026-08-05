@@ -10,7 +10,7 @@ function getTargetUrl() {
     return 'http://localhost:5173';
   }
 
-  return 'https://minnesota-squad.ru/';
+  return 'https://sharkapi.ping-net.kz/';
 
   // return 'https://sharkapi.ping-net.kz/';
 }

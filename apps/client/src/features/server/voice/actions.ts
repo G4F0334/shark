@@ -63,6 +63,22 @@ export const removeUserFromVoiceChannel = (
     serverSliceActions.removeUserFromVoiceChannel({ userId, channelId })
   );
 
+  // The server is authoritative. A user can be removed from a voice channel
+  // by a disconnect or an administrative action without clicking the local
+  // leave button. Clear the local channel selection as well; the provider
+  // then releases WebRTC/media resources via its normal channel-change hook.
+  if (userId === ownUserId && channelId === currentChannelId) {
+    if (selectedChannelIdSelector(state) === channelId) {
+      setSelectedChannelId(undefined);
+    }
+
+    setCurrentVoiceChannelId(undefined);
+    updateOwnVoiceState({ webcamEnabled: false, sharingScreen: false });
+    setPinnedCard(undefined);
+    notifyVoiceSignalingRefresh();
+    return;
+  }
+
   if (userId !== ownUserId && channelId === currentChannelId) {
     playSound(SoundType.REMOTE_USER_LEFT_VOICE_CHANNEL);
   }
